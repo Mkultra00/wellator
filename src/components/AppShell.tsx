@@ -62,22 +62,32 @@ export function AppShell({ children }: { children: ReactNode }) {
             <NavLink to="/admin" icon={LayoutDashboard} label="Dashboard" active={pathname === "/admin"} />
           </nav>
 
-          <div className="flex items-center gap-3">
-            <span className="hidden text-xs uppercase tracking-wider text-muted-foreground sm:inline">
-              Demo patient
-            </span>
-            <Select value={patient?.id ?? ""} onValueChange={setPatientId}>
-              <SelectTrigger className="w-[220px]">
-                <SelectValue placeholder="Select patient" />
-              </SelectTrigger>
-              <SelectContent>
-                {patients.map((p) => (
-                  <SelectItem key={p.id} value={p.id}>
-                    {p.full_name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+          <div className="flex flex-col items-end gap-1">
+            <div className="flex items-center gap-3">
+              <span className="hidden text-xs uppercase tracking-wider text-muted-foreground sm:inline">
+                Demo patient
+              </span>
+              <Select value={patient?.id ?? ""} onValueChange={setPatientId}>
+                <SelectTrigger className="w-[260px]">
+                  <SelectValue placeholder="Select patient" />
+                </SelectTrigger>
+                <SelectContent>
+                  {patients.map((p) => (
+                    <SelectItem key={p.id} value={p.id}>
+                      <div className="flex flex-col">
+                        <span>{p.full_name}</span>
+                        {p.address && (
+                          <span className="text-xs text-muted-foreground">{p.address}</span>
+                        )}
+                      </div>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            {patient?.address && (
+              <span className="text-xs text-muted-foreground">📍 {patient.address}</span>
+            )}
           </div>
         </div>
       </header>
