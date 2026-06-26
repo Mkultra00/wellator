@@ -66,7 +66,7 @@ function Index() {
     setProvider(null);
   }
 
-  const readyForVoice = active && (active !== "new_booking" || provider);
+  
 
   return (
     <AppShell>
