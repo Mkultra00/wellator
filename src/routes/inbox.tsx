@@ -1,15 +1,17 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
+import { useServerFn } from "@tanstack/react-start";
 import { AppShell } from "@/components/AppShell";
 import { VoicePanel, type Scenario } from "@/components/VoicePanel";
 import { usePatient } from "@/lib/patient-context";
-import { supabase } from "@/integrations/supabase/client";
+import { listScheduledCalls, updateScheduledCallStatus } from "@/lib/data.functions";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Phone, Clock, CheckCircle2, X } from "lucide-react";
 import { formatDistanceToNowStrict } from "date-fns";
+
 
 export const Route = createFileRoute("/inbox")({
   head: () => ({
