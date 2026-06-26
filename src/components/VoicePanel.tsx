@@ -134,6 +134,11 @@ export function VoicePanel({ patient, scenario, context, onClose }: Props) {
     try {
       await navigator.mediaDevices.getUserMedia({ audio: true });
       const { token } = await fetchToken();
+      const selected = (context as { selected_provider?: { name: string; specialty: string; location: string } } | undefined)?.selected_provider;
+      const opener =
+        scenario === "new_booking" && selected
+          ? `Hi, this is Mara from your care team. I see you'd like to book with ${selected.name}, ${selected.specialty} at ${selected.location}. I'll find the next available slot and get it on the calendar. Does any day or time work better for you?`
+          : SCENARIO_OPENER[scenario];
       await conversation.startSession({
         conversationToken: token,
         connectionType: "webrtc",
@@ -144,7 +149,7 @@ export function VoicePanel({ patient, scenario, context, onClose }: Props) {
           accessibility_notes: patient.accessibility_notes ?? "",
           scenario,
           scenario_label: SCENARIO_LABEL[scenario],
-          opener: SCENARIO_OPENER[scenario],
+          opener,
           context_json: JSON.stringify(context ?? {}),
         },
       });

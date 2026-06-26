@@ -2,9 +2,11 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
 import { AppShell } from "@/components/AppShell";
 import { VoicePanel, type Scenario } from "@/components/VoicePanel";
+import { ProviderPicker, type PickedProvider } from "@/components/ProviderPicker";
 import { usePatient } from "@/lib/patient-context";
 import { Card } from "@/components/ui/card";
-import { CalendarPlus, Activity, FileText, ArrowRight } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { CalendarPlus, Activity, FileText, ArrowRight, ArrowLeft } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/")({
@@ -26,18 +28,18 @@ export const Route = createFileRoute("/")({
   component: Index,
 });
 
-type Card = {
+type CardDef = {
   id: Scenario;
   title: string;
   body: string;
   Icon: typeof CalendarPlus;
 };
 
-const CARDS: Card[] = [
+const CARDS: CardDef[] = [
   {
     id: "new_booking",
     title: "Book an appointment",
-    body: "Tell Mara what kind of doctor you need to see, when, and with which insurance. She'll find a slot and book it.",
+    body: "Browse our list of doctors and specialists, pick one, and Mara will call to book a visit on your behalf.",
     Icon: CalendarPlus,
   },
   {
@@ -57,6 +59,14 @@ const CARDS: Card[] = [
 function Index() {
   const { patient, isLoading } = usePatient();
   const [active, setActive] = useState<Scenario | null>(null);
+  const [provider, setProvider] = useState<PickedProvider | null>(null);
+
+  function chooseScenario(id: Scenario) {
+    setActive(id);
+    setProvider(null);
+  }
+
+  
 
   return (
     <AppShell>
@@ -88,7 +98,7 @@ function Index() {
               return (
                 <Card
                   key={c.id}
-                  onClick={() => setActive(c.id)}
+                  onClick={() => chooseScenario(c.id)}
                   className={cn(
                     "group cursor-pointer border-2 p-6 transition-all hover:border-primary hover:shadow-md",
                     isActive ? "border-primary bg-primary/5 shadow-md" : "border-border",
@@ -107,13 +117,35 @@ function Index() {
             })}
           </section>
 
-          {active && (
+          {active === "new_booking" && !provider && (
             <section>
+              <ProviderPicker selectedId={null} onSelect={setProvider} />
+            </section>
+          )}
+
+          {active && (active !== "new_booking" || provider) && (
+            <section className="space-y-3">
+              {active === "new_booking" && provider && (
+                <div className="flex items-center justify-between rounded-lg border border-border bg-muted/30 px-4 py-3">
+                  <div className="text-sm">
+                    <span className="text-muted-foreground">Calling about: </span>
+                    <span className="font-medium">{provider.name}</span>
+                    <span className="text-muted-foreground"> · {provider.specialty} · {provider.location}</span>
+                  </div>
+                  <Button variant="ghost" size="sm" onClick={() => setProvider(null)} className="gap-1">
+                    <ArrowLeft className="h-4 w-4" /> Change
+                  </Button>
+                </div>
+              )}
               <VoicePanel
-                key={`${patient.id}-${active}`}
+                key={`${patient.id}-${active}-${provider?.id ?? "none"}`}
                 patient={patient}
                 scenario={active}
-                onClose={() => setActive(null)}
+                context={provider ? { selected_provider: provider } : undefined}
+                onClose={() => {
+                  setActive(null);
+                  setProvider(null);
+                }}
               />
             </section>
           )}
