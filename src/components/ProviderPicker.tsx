@@ -20,7 +20,6 @@ import { cn } from "@/lib/utils";
 import { Slider } from "@/components/ui/slider";
 
 export type PickedProvider = {
-
   id: string;
   name: string;
   specialty: string;
@@ -28,6 +27,7 @@ export type PickedProvider = {
   accepts_insurance: string[];
   is_primary?: boolean;
   distance_miles?: number | null;
+  clinic_address?: string | null;
 };
 
 
