@@ -38,12 +38,13 @@ export const listPatients = createServerFn({ method: "GET" }).handler(async () =
   const { data, error } = await db
     .from("patients")
     .select(
-      "id,full_name,dob,preferred_language,accessibility_notes,persona_note,primary_provider_id,address,latitude,longitude",
+      "id,full_name,dob,preferred_language,accessibility_notes,persona_note,primary_provider_id,address,latitude,longitude,needed_specialties",
     )
     .order("full_name");
   if (error) throw new Error(error.message);
   return data ?? [];
 });
+
 
 export const listReferralNetwork = createServerFn({ method: "GET" })
   .inputValidator((d) => z.object({ patient_id: z.string().min(1) }).parse(d))
