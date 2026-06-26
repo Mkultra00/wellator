@@ -41,7 +41,7 @@ export const listReferralNetwork = createServerFn({ method: "GET" })
     const { data: primary } = primaryId
       ? await db
           .from("providers")
-          .select("id,name,specialty,location,accepts_insurance,is_primary")
+          .select("id,name,specialty,location,accepts_insurance,is_primary,distance_miles")
           .eq("id", primaryId)
           .maybeSingle()
       : { data: null };
@@ -50,13 +50,14 @@ export const listReferralNetwork = createServerFn({ method: "GET" })
     if (primaryId) {
       const { data: refs, error: rErr } = await db
         .from("provider_referrals")
-        .select("specialist:providers!provider_referrals_specialist_id_fkey(id,name,specialty,location,accepts_insurance,is_primary)")
+        .select("specialist:providers!provider_referrals_specialist_id_fkey(id,name,specialty,location,accepts_insurance,is_primary,distance_miles)")
         .eq("primary_id", primaryId);
       if (rErr) throw new Error(rErr.message);
       specialists = (refs ?? []).map((r: any) => r.specialist).filter(Boolean);
     }
     return { primary: primary ?? null, specialists };
   });
+
 
 
 export const listScheduledCalls = createServerFn({ method: "GET" }).handler(async () => {
