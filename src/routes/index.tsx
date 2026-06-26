@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import { AppShell } from "@/components/AppShell";
 import { VoicePanel, type Scenario } from "@/components/VoicePanel";
 import { ProviderPicker, type PickedProvider } from "@/components/ProviderPicker";
@@ -60,11 +60,21 @@ function Index() {
   const { patient, isLoading } = usePatient();
   const [active, setActive] = useState<Scenario | null>(null);
   const [provider, setProvider] = useState<PickedProvider | null>(null);
+  const detailRef = useRef<HTMLDivElement | null>(null);
 
   function chooseScenario(id: Scenario) {
     setActive(id);
     setProvider(null);
   }
+
+  useEffect(() => {
+    if (active) {
+      requestAnimationFrame(() =>
+        detailRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }),
+      );
+    }
+  }, [active, provider]);
+
 
   
 
@@ -118,13 +128,13 @@ function Index() {
           </section>
 
           {active === "new_booking" && !provider && (
-            <section>
+            <section ref={detailRef}>
               <ProviderPicker selectedId={null} onSelect={setProvider} />
             </section>
           )}
 
           {active && (active !== "new_booking" || provider) && (
-            <section className="space-y-3">
+            <section ref={detailRef} className="space-y-3">
               {active === "new_booking" && provider && (
                 <div className="flex items-center justify-between rounded-lg border border-border bg-muted/30 px-4 py-3">
                   <div className="text-sm">
