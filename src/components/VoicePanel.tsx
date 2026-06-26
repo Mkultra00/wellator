@@ -77,31 +77,23 @@ export function VoicePanel({ patient, scenario, context, onClose }: Props) {
     },
     onConnect: () => {
       const sessionId = conversation.getId?.() ?? null;
-      supabase
-        .from("call_logs")
-        .insert({
-          patient_id: patient.id,
-          scenario,
-          agent_session_id: sessionId,
-          started_at: new Date().toISOString(),
+      insertCallLog({
+        data: { patient_id: patient.id, scenario, agent_session_id: sessionId },
+      })
+        .then((r) => {
+          if (r?.id) callLogIdRef.current = r.id;
         })
-        .select("id")
-        .single()
-        .then(({ data }) => {
-          if (data) callLogIdRef.current = data.id as string;
-        });
+        .catch(() => {});
     },
     onDisconnect: () => {
       if (callLogIdRef.current) {
-        supabase
-          .from("call_logs")
-          .update({
-            ended_at: new Date().toISOString(),
+        finalizeCallLog({
+          data: {
+            id: callLogIdRef.current,
             transcript: transcriptRef.current,
             outcome: "completed",
-          })
-          .eq("id", callLogIdRef.current)
-          .then(() => {});
+          },
+        }).catch(() => {});
       }
     },
     onMessage: (msg: { source?: string; message?: string }) => {
