@@ -1,0 +1,157 @@
+/**
+ * Tool contracts called by the agent (both from the browser client tools
+ * and from /api/public/agent-tools webhook for ElevenLabs server tools).
+ *
+ * Demo mode: queries run with the anon Supabase client (open RLS).
+ * Swap-in for prod: scope to auth.uid() and tighten policies.
+ */
+import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+
+function getServerSupabase(): SupabaseClient {
+  const url = process.env.SUPABASE_URL!;
+  const key = process.env.SUPABASE_PUBLISHABLE_KEY!;
+  return createClient(url, key, {
+    auth: { persistSession: false, autoRefreshToken: false },
+  });
+}
+
+export type ToolName =
+  | "find_providers"
+  | "check_availability"
+  | "book_appointment"
+  | "get_insurance_summary"
+  | "get_billing_summary"
+  | "record_pt_feedback"
+  | "request_human_transfer";
+
+export async function runTool(
+  name: ToolName,
+  params: Record<string, unknown>,
+  supabase: SupabaseClient = getServerSupabase(),
+): Promise<unknown> {
+  switch (name) {
+    case "find_providers": {
+      const { specialty, location } = params as { specialty?: string; location?: string };
+      let q = supabase.from("providers").select("id,name,specialty,location,accepts_insurance");
+      if (specialty) q = q.ilike("specialty", `%${specialty}%`);
+      if (location) q = q.ilike("location", `%${location}%`);
+      const { data, error } = await q.limit(10);
+      if (error) throw error;
+      return { providers: data ?? [] };
+    }
+    case "check_availability": {
+      const { provider_id, earliest_date } = params as {
+        provider_id: string;
+        earliest_date?: string;
+      };
+      const start = earliest_date ?? new Date().toISOString();
+      const { data, error } = await supabase
+        .from("slots")
+        .select("id,starts_at,ends_at")
+        .eq("provider_id", provider_id)
+        .eq("status", "open")
+        .gte("starts_at", start)
+        .order("starts_at", { ascending: true })
+        .limit(6);
+      if (error) throw error;
+      return { slots: data ?? [] };
+    }
+    case "book_appointment": {
+      const { patient_id, slot_id, reason } = params as {
+        patient_id: string;
+        slot_id: string;
+        reason?: string;
+      };
+      // Conditional update: only book if still open (prevents double-book).
+      const { data: slotRow, error: slotErr } = await supabase
+        .from("slots")
+        .update({ status: "booked" })
+        .eq("id", slot_id)
+        .eq("status", "open")
+        .select("id,provider_id,starts_at")
+        .maybeSingle();
+      if (slotErr) throw slotErr;
+      if (!slotRow) return { ok: false, reason: "slot_no_longer_available" };
+
+      const { data: insuranceRow } = await supabase
+        .from("insurance_profiles")
+        .select("payer,plan,member_id")
+        .eq("patient_id", patient_id)
+        .maybeSingle();
+
+      const { data: appt, error: apptErr } = await supabase
+        .from("appointments")
+        .insert({
+          patient_id,
+          provider_id: slotRow.provider_id,
+          slot_id: slotRow.id,
+          starts_at: slotRow.starts_at,
+          reason: reason ?? null,
+          insurance_snapshot: insuranceRow ?? null,
+          created_via: "voice_agent",
+        })
+        .select("id,starts_at")
+        .single();
+      if (apptErr) throw apptErr;
+      return { ok: true, appointment_id: appt.id, starts_at: appt.starts_at };
+    }
+    case "get_insurance_summary": {
+      const { patient_id } = params as { patient_id: string };
+      const { data, error } = await supabase
+        .from("insurance_profiles")
+        .select("payer,plan,member_id,referral_required,copay_cents")
+        .eq("patient_id", patient_id)
+        .maybeSingle();
+      if (error) throw error;
+      return { insurance: data };
+    }
+    case "get_billing_summary": {
+      const { patient_id, bill_id } = params as { patient_id: string; bill_id?: string };
+      let q = supabase
+        .from("bills")
+        .select("id,amount_cents,status,line_items,issued_at,eobs(payer_paid_cents,patient_responsibility_cents,denial_reason,plain_language_summary)")
+        .eq("patient_id", patient_id);
+      if (bill_id) q = q.eq("id", bill_id);
+      const { data, error } = await q.order("issued_at", { ascending: false }).limit(5);
+      if (error) throw error;
+      return { bills: data ?? [] };
+    }
+    case "record_pt_feedback": {
+      const { patient_id, appointment_id, pain_0_10, mobility_change, adherence, comment } =
+        params as {
+          patient_id: string;
+          appointment_id?: string;
+          pain_0_10?: number;
+          mobility_change?: string;
+          adherence?: string;
+          comment?: string;
+        };
+      const { error } = await supabase.from("pt_feedback").insert({
+        patient_id,
+        appointment_id: appointment_id ?? null,
+        pain_0_10: pain_0_10 ?? null,
+        mobility_change: mobility_change ?? null,
+        adherence: adherence ?? null,
+        comment: comment ?? null,
+      });
+      if (error) throw error;
+      return { ok: true };
+    }
+    case "request_human_transfer": {
+      const { patient_id, reason, session_id } = params as {
+        patient_id: string;
+        reason: string;
+        session_id?: string;
+      };
+      const { error } = await supabase
+        .from("call_logs")
+        .update({ human_transfer_requested: true, transfer_reason: reason })
+        .eq("agent_session_id", session_id ?? "")
+        .eq("patient_id", patient_id);
+      if (error) console.error("transfer update failed", error);
+      return { ok: true, message: "A human teammate will follow up shortly." };
+    }
+    default:
+      throw new Error(`Unknown tool: ${name as string}`);
+  }
+}
