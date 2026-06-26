@@ -51,6 +51,7 @@ export function ProviderPicker({ selectedIds, onChange, onConfirm }: Props) {
       (await fetchNetwork({ data: { patient_id: patient!.id } })) as {
         primary: PickedProvider | null;
         specialists: PickedProvider[];
+        patient_address: string | null;
       },
   });
 
