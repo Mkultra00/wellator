@@ -22,7 +22,7 @@ type Turn = { role: "user" | "agent"; text: string; at: string };
 export type Scenario = "new_booking" | "pt_followup" | "billing_explainer" | "reminder";
 
 const SCENARIO_LABEL: Record<Scenario, string> = {
-  new_booking: "Booking a new appointment",
+  new_booking: "Mara calling the doctor's office",
   pt_followup: "Physical therapy follow-up",
   billing_explainer: "Help with a bill or benefit",
   reminder: "Appointment reminder",
@@ -30,7 +30,7 @@ const SCENARIO_LABEL: Record<Scenario, string> = {
 
 const SCENARIO_OPENER: Record<Scenario, string> = {
   new_booking:
-    "Hi, this is Mara from your care team. I can help you book a new appointment. What kind of doctor do you need to see?",
+    "Hi, this is Mara, an AI care navigator calling on behalf of a patient. I'd like to book a new appointment with one of your providers. Do you have a moment?",
   pt_followup:
     "Hi, this is Mara following up after your physical therapy visit. Do you have a couple of minutes for a few quick questions?",
   billing_explainer:
@@ -137,7 +137,7 @@ export function VoicePanel({ patient, scenario, context, onClose }: Props) {
       const selected = (context as { selected_provider?: { name: string; specialty: string; location: string } } | undefined)?.selected_provider;
       const opener =
         scenario === "new_booking" && selected
-          ? `Hi, this is Mara from your care team. I see you'd like to book with ${selected.name}, ${selected.specialty} at ${selected.location}. I'll find the next available slot and get it on the calendar. Does any day or time work better for you?`
+          ? `Hi, this is Mara, an AI care navigator calling on behalf of ${patient.full_name}. I'm calling ${selected.name}'s office (${selected.specialty}, ${selected.location}) to book a new appointment. Could you help me find the next available slot?`
           : SCENARIO_OPENER[scenario];
       await conversation.startSession({
         conversationToken: token,
@@ -184,7 +184,9 @@ export function VoicePanel({ patient, scenario, context, onClose }: Props) {
               {SCENARIO_LABEL[scenario]}
             </div>
             <div className="mt-1 text-lg font-semibold">
-              Talking to Mara &mdash; on behalf of {patient.full_name}
+              {scenario === "new_booking"
+                ? `Mara is calling the office on behalf of ${patient.full_name}`
+                : `Talking to Mara — on behalf of ${patient.full_name}`}
             </div>
           </div>
           <VoiceOrb active={isConnected} speaking={isSpeaking} />
