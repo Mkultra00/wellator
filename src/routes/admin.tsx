@@ -36,7 +36,7 @@ function AdminPage() {
     patients?: { full_name: string } | null;
     providers?: { name: string; specialty: string; location: string } | null;
   }>;
-  const callsData = (dash.data?.call_logs ?? []) as Array<{
+  const callsData = (dash.data?.call_logs ?? []) as unknown as Array<{
     id: string;
     scenario: string;
     started_at: string;
