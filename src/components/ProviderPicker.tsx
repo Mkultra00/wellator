@@ -20,7 +20,6 @@ import { cn } from "@/lib/utils";
 import { Slider } from "@/components/ui/slider";
 
 export type PickedProvider = {
-
   id: string;
   name: string;
   specialty: string;
@@ -28,6 +27,7 @@ export type PickedProvider = {
   accepts_insurance: string[];
   is_primary?: boolean;
   distance_miles?: number | null;
+  clinic_address?: string | null;
 };
 
 
@@ -51,6 +51,7 @@ export function ProviderPicker({ selectedIds, onChange, onConfirm }: Props) {
       (await fetchNetwork({ data: { patient_id: patient!.id } })) as {
         primary: PickedProvider | null;
         specialists: PickedProvider[];
+        patient_address: string | null;
       },
   });
 
@@ -109,9 +110,10 @@ export function ProviderPicker({ selectedIds, onChange, onConfirm }: Props) {
             <Stethoscope className="h-3.5 w-3.5" /> {p.specialty}
           </div>
           <div className="mt-0.5 flex items-center gap-1 text-sm text-muted-foreground">
-            <MapPin className="h-3.5 w-3.5" /> {p.location}
+            <MapPin className="h-3.5 w-3.5 shrink-0" />
+            <span className="truncate">{p.clinic_address || p.location}</span>
             {typeof p.distance_miles === "number" && (
-              <span className="ml-1 font-medium text-foreground">· {p.distance_miles} mi</span>
+              <span className="ml-1 shrink-0 font-medium text-foreground">· {p.distance_miles} mi</span>
             )}
           </div>
 
@@ -138,6 +140,11 @@ export function ProviderPicker({ selectedIds, onChange, onConfirm }: Props) {
             Your primary doctor's referral network. Select every office you'd be willing to see —
             Mara batch-calls them and books the best match for your preferences.
           </p>
+          {data?.patient_address && (
+            <p className="mt-1 flex items-center gap-1 text-xs text-muted-foreground">
+              <MapPin className="h-3 w-3" /> Distances from {data.patient_address}
+            </p>
+          )}
         </div>
         <Badge variant="secondary" className="shrink-0">{selectedIds.length} selected</Badge>
       </div>
