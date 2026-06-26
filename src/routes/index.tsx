@@ -60,11 +60,21 @@ function Index() {
   const { patient, isLoading } = usePatient();
   const [active, setActive] = useState<Scenario | null>(null);
   const [provider, setProvider] = useState<PickedProvider | null>(null);
+  const detailRef = useRef<HTMLDivElement | null>(null);
 
   function chooseScenario(id: Scenario) {
     setActive(id);
     setProvider(null);
   }
+
+  useEffect(() => {
+    if (active) {
+      requestAnimationFrame(() =>
+        detailRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }),
+      );
+    }
+  }, [active, provider]);
+
 
   
 
