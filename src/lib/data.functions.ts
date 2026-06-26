@@ -38,12 +38,13 @@ export const listPatients = createServerFn({ method: "GET" }).handler(async () =
   const { data, error } = await db
     .from("patients")
     .select(
-      "id,full_name,dob,preferred_language,accessibility_notes,persona_note,primary_provider_id,address,latitude,longitude",
+      "id,full_name,dob,preferred_language,accessibility_notes,persona_note,primary_provider_id,address,latitude,longitude,needed_specialties",
     )
     .order("full_name");
   if (error) throw new Error(error.message);
   return data ?? [];
 });
+
 
 export const listReferralNetwork = createServerFn({ method: "GET" })
   .inputValidator((d) => z.object({ patient_id: z.string().min(1) }).parse(d))
@@ -51,11 +52,12 @@ export const listReferralNetwork = createServerFn({ method: "GET" })
     const db = await admin();
     const { data: pat, error: pErr } = await db
       .from("patients")
-      .select("primary_provider_id,latitude,longitude,address")
+      .select("primary_provider_id,latitude,longitude,address,needed_specialties")
       .eq("id", data.patient_id)
       .single();
     if (pErr) throw new Error(pErr.message);
     const primaryId = pat?.primary_provider_id ?? null;
+    const needed: string[] = pat?.needed_specialties ?? [];
     const patientLoc =
       pat?.latitude != null && pat?.longitude != null
         ? { lat: Number(pat.latitude), lng: Number(pat.longitude) }
@@ -86,12 +88,20 @@ export const listReferralNetwork = createServerFn({ method: "GET" })
       if (rErr) throw new Error(rErr.message);
       specialists = (refs ?? []).map((r: any) => r.specialist).filter(Boolean);
     }
+
+    // Filter specialists to patient's needed specialties when set
+    if (needed.length > 0) {
+      specialists = specialists.filter((s: any) => needed.includes(s.specialty));
+    }
+
     return {
       primary: withDistance(primary ?? null),
       specialists: specialists.map(withDistance),
       patient_address: pat?.address ?? null,
+      needed_specialties: needed,
     };
   });
+
 
 
 

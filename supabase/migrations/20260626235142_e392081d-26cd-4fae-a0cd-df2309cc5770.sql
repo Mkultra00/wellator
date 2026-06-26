@@ -1,0 +1,1 @@
+ALTER TABLE public.patients ADD COLUMN IF NOT EXISTS needed_specialties text[] NOT NULL DEFAULT '{}'::text[];

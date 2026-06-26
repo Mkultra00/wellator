@@ -254,6 +254,7 @@ export type Database = {
           latitude: number | null
           longitude: number | null
           mock_phone: string | null
+          needed_specialties: string[]
           persona_note: string | null
           preferred_language: string
           primary_provider_id: string | null
@@ -268,6 +269,7 @@ export type Database = {
           latitude?: number | null
           longitude?: number | null
           mock_phone?: string | null
+          needed_specialties?: string[]
           persona_note?: string | null
           preferred_language?: string
           primary_provider_id?: string | null
@@ -282,6 +284,7 @@ export type Database = {
           latitude?: number | null
           longitude?: number | null
           mock_phone?: string | null
+          needed_specialties?: string[]
           persona_note?: string | null
           preferred_language?: string
           primary_provider_id?: string | null

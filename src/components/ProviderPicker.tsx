@@ -52,8 +52,10 @@ export function ProviderPicker({ selectedIds, onChange, onConfirm }: Props) {
         primary: PickedProvider | null;
         specialists: PickedProvider[];
         patient_address: string | null;
+        needed_specialties: string[];
       },
   });
+
 
   const primary = data?.primary ?? null;
   const specialists = data?.specialists ?? [];
@@ -145,6 +147,15 @@ export function ProviderPicker({ selectedIds, onChange, onConfirm }: Props) {
               <MapPin className="h-3 w-3" /> Distances from {data.patient_address}
             </p>
           )}
+          {data?.needed_specialties && data.needed_specialties.length > 0 && (
+            <div className="mt-2 flex flex-wrap items-center gap-1.5">
+              <span className="text-xs text-muted-foreground">Care needs:</span>
+              {data.needed_specialties.map((s) => (
+                <Badge key={s} variant="outline" className="text-xs">{s}</Badge>
+              ))}
+            </div>
+          )}
+
         </div>
         <Badge variant="secondary" className="shrink-0">{selectedIds.length} selected</Badge>
       </div>
