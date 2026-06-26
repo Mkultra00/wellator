@@ -130,7 +130,7 @@ function AdminPage() {
                     <div>{format(new Date(a.starts_at), "PPp")}</div>
                     <div className="flex items-center gap-2">
                       <Badge variant="outline">{a.status}</Badge>
-                      <Badge variant="secondary">via {a.created_via}</Badge>
+                      <Badge variant="secondary">voice agent</Badge>
                     </div>
                   </div>
                 </div>
