@@ -246,10 +246,13 @@ export type Database = {
       patients: {
         Row: {
           accessibility_notes: string | null
+          address: string | null
           created_at: string
           dob: string
           full_name: string
           id: string
+          latitude: number | null
+          longitude: number | null
           mock_phone: string | null
           persona_note: string | null
           preferred_language: string
@@ -257,10 +260,13 @@ export type Database = {
         }
         Insert: {
           accessibility_notes?: string | null
+          address?: string | null
           created_at?: string
           dob: string
           full_name: string
           id?: string
+          latitude?: number | null
+          longitude?: number | null
           mock_phone?: string | null
           persona_note?: string | null
           preferred_language?: string
@@ -268,10 +274,13 @@ export type Database = {
         }
         Update: {
           accessibility_notes?: string | null
+          address?: string | null
           created_at?: string
           dob?: string
           full_name?: string
           id?: string
+          latitude?: number | null
+          longitude?: number | null
           mock_phone?: string | null
           persona_note?: string | null
           preferred_language?: string
@@ -320,30 +329,39 @@ export type Database = {
       providers: {
         Row: {
           accepts_insurance: string[]
+          clinic_address: string | null
           distance_miles: number | null
           id: string
           is_primary: boolean
+          latitude: number | null
           location: string
+          longitude: number | null
           name: string
           npi_mock: string | null
           specialty: string
         }
         Insert: {
           accepts_insurance?: string[]
+          clinic_address?: string | null
           distance_miles?: number | null
           id?: string
           is_primary?: boolean
+          latitude?: number | null
           location: string
+          longitude?: number | null
           name: string
           npi_mock?: string | null
           specialty: string
         }
         Update: {
           accepts_insurance?: string[]
+          clinic_address?: string | null
           distance_miles?: number | null
           id?: string
           is_primary?: boolean
+          latitude?: number | null
           location?: string
+          longitude?: number | null
           name?: string
           npi_mock?: string | null
           specialty?: string
