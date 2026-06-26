@@ -9,7 +9,6 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import { getElevenLabsConversationToken } from "@/lib/elevenlabs.functions";
 import type { ToolName } from "@/lib/agent-tools";
-import { supabase } from "@/integrations/supabase/client";
 import { insertCallLog, finalizeCallLog } from "@/lib/data.functions";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
