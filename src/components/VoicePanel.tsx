@@ -8,7 +8,7 @@ import { useConversation } from "@elevenlabs/react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import { getElevenLabsConversationToken } from "@/lib/elevenlabs.functions";
-import { runTool, type ToolName } from "@/lib/agent-tools";
+import type { ToolName } from "@/lib/agent-tools";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";

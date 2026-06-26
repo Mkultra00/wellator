@@ -9,9 +9,21 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as InboxRouteImport } from './routes/inbox'
+import { Route as AdminRouteImport } from './routes/admin'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as ApiPublicAgentToolsSplatRouteImport } from './routes/api/public/agent-tools/$'
 
+const InboxRoute = InboxRouteImport.update({
+  id: '/inbox',
+  path: '/inbox',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AdminRoute = AdminRouteImport.update({
+  id: '/admin',
+  path: '/admin',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
@@ -26,32 +38,54 @@ const ApiPublicAgentToolsSplatRoute =
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/admin': typeof AdminRoute
+  '/inbox': typeof InboxRoute
   '/api/public/agent-tools/$': typeof ApiPublicAgentToolsSplatRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/admin': typeof AdminRoute
+  '/inbox': typeof InboxRoute
   '/api/public/agent-tools/$': typeof ApiPublicAgentToolsSplatRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/admin': typeof AdminRoute
+  '/inbox': typeof InboxRoute
   '/api/public/agent-tools/$': typeof ApiPublicAgentToolsSplatRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/api/public/agent-tools/$'
+  fullPaths: '/' | '/admin' | '/inbox' | '/api/public/agent-tools/$'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/api/public/agent-tools/$'
-  id: '__root__' | '/' | '/api/public/agent-tools/$'
+  to: '/' | '/admin' | '/inbox' | '/api/public/agent-tools/$'
+  id: '__root__' | '/' | '/admin' | '/inbox' | '/api/public/agent-tools/$'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  AdminRoute: typeof AdminRoute
+  InboxRoute: typeof InboxRoute
   ApiPublicAgentToolsSplatRoute: typeof ApiPublicAgentToolsSplatRoute
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/inbox': {
+      id: '/inbox'
+      path: '/inbox'
+      fullPath: '/inbox'
+      preLoaderRoute: typeof InboxRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/admin': {
+      id: '/admin'
+      path: '/admin'
+      fullPath: '/admin'
+      preLoaderRoute: typeof AdminRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/': {
       id: '/'
       path: '/'
@@ -71,6 +105,8 @@ declare module '@tanstack/react-router' {
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  AdminRoute: AdminRoute,
+  InboxRoute: InboxRoute,
   ApiPublicAgentToolsSplatRoute: ApiPublicAgentToolsSplatRoute,
 }
 export const routeTree = rootRouteImport
