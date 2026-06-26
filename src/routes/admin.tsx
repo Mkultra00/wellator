@@ -7,6 +7,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { Calendar, MessageSquare, Activity, AlertOctagon } from "lucide-react";
 import { format, formatDistanceToNowStrict } from "date-fns";
+import { ProviderManager } from "@/components/ProviderManager";
 
 export const Route = createFileRoute("/admin")({
   head: () => ({
@@ -94,6 +95,7 @@ function AdminPage() {
 
         <Tabs defaultValue="appointments">
           <TabsList>
+            <TabsTrigger value="providers">Providers</TabsTrigger>
             <TabsTrigger value="appointments">Appointments</TabsTrigger>
             <TabsTrigger value="calls">Call transcripts</TabsTrigger>
             <TabsTrigger value="pt">PT feedback</TabsTrigger>
@@ -106,6 +108,10 @@ function AdminPage() {
               )}
             </TabsTrigger>
           </TabsList>
+
+          <TabsContent value="providers">
+            <ProviderManager />
+          </TabsContent>
 
           <TabsContent value="appointments" className="space-y-2">
             {(appts.data ?? []).map((a) => (
