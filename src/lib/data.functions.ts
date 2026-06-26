@@ -46,7 +46,7 @@ export const listPatients = createServerFn({ method: "GET" }).handler(async () =
 });
 
 export const listReferralNetwork = createServerFn({ method: "GET" })
-  .inputValidator((d) => z.object({ patient_id: z.string().uuid() }).parse(d))
+  .inputValidator((d) => z.object({ patient_id: z.string().min(1) }).parse(d))
   .handler(async ({ data }) => {
     const db = await admin();
     const { data: pat, error: pErr } = await db
@@ -123,7 +123,7 @@ export const insertCallLog = createServerFn({ method: "POST" })
   .inputValidator((d) =>
     z
       .object({
-        patient_id: z.string().uuid(),
+        patient_id: z.string().min(1),
         scenario: z.string(),
         agent_session_id: z.string().nullable().optional(),
       })
