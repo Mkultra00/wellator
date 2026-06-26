@@ -110,9 +110,10 @@ export function ProviderPicker({ selectedIds, onChange, onConfirm }: Props) {
             <Stethoscope className="h-3.5 w-3.5" /> {p.specialty}
           </div>
           <div className="mt-0.5 flex items-center gap-1 text-sm text-muted-foreground">
-            <MapPin className="h-3.5 w-3.5" /> {p.location}
+            <MapPin className="h-3.5 w-3.5 shrink-0" />
+            <span className="truncate">{p.clinic_address || p.location}</span>
             {typeof p.distance_miles === "number" && (
-              <span className="ml-1 font-medium text-foreground">· {p.distance_miles} mi</span>
+              <span className="ml-1 shrink-0 font-medium text-foreground">· {p.distance_miles} mi</span>
             )}
           </div>
 
