@@ -101,52 +101,58 @@ function Index() {
             </p>
           </section>
 
-          <section className="grid gap-4 md:grid-cols-3">
+          <section className="grid gap-4 md:grid-cols-3 items-start">
             {CARDS.map((c) => {
               const Icon = c.Icon;
               const isActive = active === c.id;
+              const isBooking = c.id === "new_booking";
               return (
                 <Card
                   key={c.id}
                   onClick={() => chooseScenario(c.id)}
                   className={cn(
-                    "group cursor-pointer border-2 p-6 transition-all hover:border-primary hover:shadow-md",
-                    isActive ? "border-primary bg-primary/5 shadow-md" : "border-border",
+                    "group cursor-pointer border-2 p-0 transition-all hover:border-primary hover:shadow-md",
+                    isActive ? "border-primary shadow-md" : "border-border",
                   )}
                 >
-                  <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-primary/10 text-primary">
-                    <Icon className="h-6 w-6" />
+                  <div className="p-6">
+                    <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                      <Icon className="h-6 w-6" />
+                    </div>
+                    <h2 className="mt-4 text-xl font-semibold text-foreground">{c.title}</h2>
+                    <p className="mt-2 text-sm text-muted-foreground">{c.body}</p>
+                    <div className="mt-4 flex items-center gap-1 text-sm font-medium text-primary opacity-0 transition-opacity group-hover:opacity-100">
+                      Select <ArrowRight className="h-4 w-4" />
+                    </div>
                   </div>
-                  <h2 className="mt-4 text-xl font-semibold text-foreground">{c.title}</h2>
-                  <p className="mt-2 text-sm text-muted-foreground">{c.body}</p>
-                  <div className="mt-4 flex items-center gap-1 text-sm font-medium text-primary opacity-0 transition-opacity group-hover:opacity-100">
-                    Select <ArrowRight className="h-4 w-4" />
-                  </div>
+
+                  {isBooking && isActive && !provider && (
+                    <div className="border-t border-border bg-primary/5 p-4" ref={isActive ? detailRef : undefined}>
+                      <ProviderPicker selectedId={null} onSelect={setProvider} />
+                    </div>
+                  )}
+
+                  {isBooking && isActive && provider && (
+                    <div className="border-t border-border bg-primary/5 p-4">
+                      <div className="flex items-center justify-between rounded-lg border border-border bg-muted/30 px-4 py-3">
+                        <div className="text-sm">
+                          <span className="text-muted-foreground">Mara is calling: </span>
+                          <span className="font-medium">{provider.name}'s office</span>
+                          <span className="text-muted-foreground"> · {provider.specialty} · {provider.location}</span>
+                        </div>
+                        <Button variant="ghost" size="sm" onClick={() => setProvider(null)} className="gap-1">
+                          <ArrowLeft className="h-4 w-4" /> Change
+                        </Button>
+                      </div>
+                    </div>
+                  )}
                 </Card>
               );
             })}
           </section>
 
-          {active === "new_booking" && !provider && (
-            <section ref={detailRef}>
-              <ProviderPicker selectedId={null} onSelect={setProvider} />
-            </section>
-          )}
-
           {active && (active !== "new_booking" || provider) && (
-            <section ref={detailRef} className="space-y-3">
-              {active === "new_booking" && provider && (
-                <div className="flex items-center justify-between rounded-lg border border-border bg-muted/30 px-4 py-3">
-                  <div className="text-sm">
-                    <span className="text-muted-foreground">Mara is calling: </span>
-                    <span className="font-medium">{provider.name}'s office</span>
-                    <span className="text-muted-foreground"> · {provider.specialty} · {provider.location}</span>
-                  </div>
-                  <Button variant="ghost" size="sm" onClick={() => setProvider(null)} className="gap-1">
-                    <ArrowLeft className="h-4 w-4" /> Change
-                  </Button>
-                </div>
-              )}
+            <section ref={active !== "new_booking" ? detailRef : undefined} className="space-y-3">
               <VoicePanel
                 key={`${patient.id}-${active}-${provider?.id ?? "none"}`}
                 patient={patient}
