@@ -10,33 +10,44 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as ApiPublicAgentToolsSplatRouteImport } from './routes/api/public/agent-tools/$'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiPublicAgentToolsSplatRoute =
+  ApiPublicAgentToolsSplatRouteImport.update({
+    id: '/api/public/agent-tools/$',
+    path: '/api/public/agent-tools/$',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/api/public/agent-tools/$': typeof ApiPublicAgentToolsSplatRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/api/public/agent-tools/$': typeof ApiPublicAgentToolsSplatRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/api/public/agent-tools/$': typeof ApiPublicAgentToolsSplatRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/'
+  fullPaths: '/' | '/api/public/agent-tools/$'
   fileRoutesByTo: FileRoutesByTo
-  to: '/'
-  id: '__root__' | '/'
+  to: '/' | '/api/public/agent-tools/$'
+  id: '__root__' | '/' | '/api/public/agent-tools/$'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  ApiPublicAgentToolsSplatRoute: typeof ApiPublicAgentToolsSplatRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -48,11 +59,19 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/public/agent-tools/$': {
+      id: '/api/public/agent-tools/$'
+      path: '/api/public/agent-tools/$'
+      fullPath: '/api/public/agent-tools/$'
+      preLoaderRoute: typeof ApiPublicAgentToolsSplatRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  ApiPublicAgentToolsSplatRoute: ApiPublicAgentToolsSplatRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
