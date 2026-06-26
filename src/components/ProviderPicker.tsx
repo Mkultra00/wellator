@@ -17,7 +17,10 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { MapPin, Stethoscope, PhoneOutgoing, UserRound } from "lucide-react";
 import { cn } from "@/lib/utils";
 
+import { Slider } from "@/components/ui/slider";
+
 export type PickedProvider = {
+
   id: string;
   name: string;
   specialty: string;
