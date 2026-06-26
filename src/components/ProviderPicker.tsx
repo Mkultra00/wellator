@@ -105,7 +105,11 @@ export function ProviderPicker({ selectedIds, onChange, onConfirm }: Props) {
           </div>
           <div className="mt-0.5 flex items-center gap-1 text-sm text-muted-foreground">
             <MapPin className="h-3.5 w-3.5" /> {p.location}
+            {typeof p.distance_miles === "number" && (
+              <span className="ml-1 font-medium text-foreground">· {p.distance_miles} mi</span>
+            )}
           </div>
+
           {p.accepts_insurance?.length > 0 && (
             <div className="mt-2 flex flex-wrap gap-1">
               {p.accepts_insurance.slice(0, 3).map((ins) => (
