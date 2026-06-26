@@ -25,17 +25,12 @@ const PatientContext = createContext<Ctx | null>(null);
 const STORAGE_KEY = "vcn.activePatientId";
 
 export function PatientProvider({ children }: { children: ReactNode }) {
+  const fetchPatients = useServerFn(listPatients);
   const { data, isLoading } = useQuery({
     queryKey: ["patients"],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("patients")
-        .select("id,full_name,dob,preferred_language,accessibility_notes,persona_note")
-        .order("full_name");
-      if (error) throw error;
-      return (data ?? []) as Patient[];
-    },
+    queryFn: async () => (await fetchPatients()) as Patient[],
   });
+
 
   const [activeId, setActiveId] = useState<string | null>(null);
 
