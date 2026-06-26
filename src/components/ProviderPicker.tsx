@@ -24,7 +24,9 @@ export type PickedProvider = {
   location: string;
   accepts_insurance: string[];
   is_primary?: boolean;
+  distance_miles?: number | null;
 };
+
 
 type Props = {
   selectedIds: string[];
