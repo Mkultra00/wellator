@@ -22,58 +22,59 @@ export const Route = createFileRoute("/admin")({
 });
 
 function AdminPage() {
-  const appts = useQuery({
-    queryKey: ["admin", "appointments"],
-    queryFn: async () => {
-      const { data } = await supabase
-        .from("appointments")
-        .select("id,starts_at,status,reason,created_via,patients(full_name),providers(name,specialty)")
-        .order("starts_at", { ascending: false })
-        .limit(50);
-      return data ?? [];
-    },
+  const fetchDashboard = useServerFn(adminDashboardData);
+  const dash = useQuery({
+    queryKey: ["admin", "dashboard"],
+    queryFn: async () => await fetchDashboard(),
   });
 
-  const calls = useQuery({
-    queryKey: ["admin", "call_logs"],
-    queryFn: async () => {
-      const { data } = await supabase
-        .from("call_logs")
-        .select("id,scenario,started_at,ended_at,transcript,human_transfer_requested,transfer_reason,patients(full_name)")
-        .order("started_at", { ascending: false })
-        .limit(50);
-      return data ?? [];
-    },
-  });
+  const apptsData = (dash.data?.appointments ?? []) as Array<{
+    id: string;
+    starts_at: string;
+    status: string;
+    reason: string | null;
+    patients?: { full_name: string } | null;
+    providers?: { name: string; specialty: string; location: string } | null;
+  }>;
+  const callsData = (dash.data?.call_logs ?? []) as Array<{
+    id: string;
+    scenario: string;
+    started_at: string;
+    ended_at: string | null;
+    transcript: Array<{ role: string; text: string }>;
+    human_transfer_requested: boolean;
+    transfer_reason: string | null;
+    patients?: { full_name: string } | null;
+  }>;
+  const ptData = (dash.data?.pt_feedback ?? []) as Array<{
+    id: string;
+    pain_0_10: number | null;
+    mobility_change: string | null;
+    adherence: string | null;
+    comment: string | null;
+    recorded_at: string;
+    patients?: { full_name: string } | null;
+  }>;
 
-  const pt = useQuery({
-    queryKey: ["admin", "pt_feedback"],
-    queryFn: async () => {
-      const { data } = await supabase
-        .from("pt_feedback")
-        .select("id,recorded_at,pain_0_10,mobility_change,adherence,comment,patients(full_name)")
-        .order("recorded_at", { ascending: false })
-        .limit(50);
-      return data ?? [];
-    },
-  });
+  const appts = { data: apptsData, isLoading: dash.isLoading };
+  const calls = { data: callsData, isLoading: dash.isLoading };
+  const pt = { data: ptData, isLoading: dash.isLoading };
 
-  const transfers = (calls.data ?? []).filter((c) => c.human_transfer_requested);
+  const transfers = callsData.filter((c) => c.human_transfer_requested);
 
-  const todayCount = (appts.data ?? []).filter(
+  const todayCount = apptsData.filter(
     (a) => new Date(a.starts_at).toDateString() === new Date().toDateString(),
   ).length;
+  const endedCalls = callsData.filter((c) => c.ended_at);
   const avgDurationSec =
-    (calls.data ?? [])
-      .filter((c) => c.ended_at)
-      .reduce(
-        (sum, c) =>
-          sum + (new Date(c.ended_at!).getTime() - new Date(c.started_at).getTime()) / 1000,
-        0,
-      ) / Math.max(1, (calls.data ?? []).filter((c) => c.ended_at).length);
-  const escalatedPct = calls.data?.length
-    ? Math.round((transfers.length / calls.data.length) * 100)
+    endedCalls.reduce(
+      (sum, c) => sum + (new Date(c.ended_at!).getTime() - new Date(c.started_at).getTime()) / 1000,
+      0,
+    ) / Math.max(1, endedCalls.length);
+  const escalatedPct = callsData.length
+    ? Math.round((transfers.length / callsData.length) * 100)
     : 0;
+
 
   return (
     <AppShell>
