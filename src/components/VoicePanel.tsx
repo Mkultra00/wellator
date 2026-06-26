@@ -126,11 +126,28 @@ export function VoicePanel({ patient, scenario, context, onClose }: Props) {
     try {
       await navigator.mediaDevices.getUserMedia({ audio: true });
       const { token } = await fetchToken();
-      const selected = (context as { selected_provider?: { name: string; specialty: string; location: string } } | undefined)?.selected_provider;
-      const opener =
-        scenario === "new_booking" && selected
-          ? `Hi, this is Mara, an AI care navigator calling on behalf of ${patient.full_name}. I'm calling ${selected.name}'s office (${selected.specialty}, ${selected.location}) to book a new appointment. Could you help me find the next available slot?`
-          : SCENARIO_OPENER[scenario];
+      const batch = context as
+        | {
+            providers?: { name: string; specialty: string; location: string }[];
+            preferences?: {
+              preferred_locations?: string;
+              days?: string[];
+              time_of_day?: string;
+              max_distance_miles?: number;
+              notes?: string;
+            };
+          }
+        | undefined;
+      const providers = batch?.providers ?? [];
+      const prefs = batch?.preferences;
+      let opener = SCENARIO_OPENER[scenario];
+      if (scenario === "new_booking" && providers.length > 0) {
+        const list = providers.map((p) => `${p.name} (${p.specialty}, ${p.location})`).join("; ");
+        const prefLine = prefs
+          ? ` The patient prefers ${prefs.time_of_day ?? "any time"} on ${(prefs.days ?? []).join(", ") || "any day"}, within ${prefs.max_distance_miles ?? "any"} miles${prefs.preferred_locations ? ` near ${prefs.preferred_locations}` : ""}${prefs.notes ? `. Notes: ${prefs.notes}` : ""}.`
+          : "";
+        opener = `Hi, this is Mara, an AI care navigator calling on behalf of ${patient.full_name}. I have a batch of ${providers.length} offices to call to book a new appointment: ${list}.${prefLine} I'll work through them one at a time — starting with the first office now. Could you help me find the next available slot?`;
+      }
       await conversation.startSession({
         conversationToken: token,
         connectionType: "webrtc",
