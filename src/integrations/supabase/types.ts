@@ -253,6 +253,7 @@ export type Database = {
           mock_phone: string | null
           persona_note: string | null
           preferred_language: string
+          primary_provider_id: string | null
         }
         Insert: {
           accessibility_notes?: string | null
@@ -263,6 +264,7 @@ export type Database = {
           mock_phone?: string | null
           persona_note?: string | null
           preferred_language?: string
+          primary_provider_id?: string | null
         }
         Update: {
           accessibility_notes?: string | null
@@ -273,13 +275,53 @@ export type Database = {
           mock_phone?: string | null
           persona_note?: string | null
           preferred_language?: string
+          primary_provider_id?: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "patients_primary_provider_id_fkey"
+            columns: ["primary_provider_id"]
+            isOneToOne: false
+            referencedRelation: "providers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      provider_referrals: {
+        Row: {
+          primary_id: string
+          specialist_id: string
+        }
+        Insert: {
+          primary_id: string
+          specialist_id: string
+        }
+        Update: {
+          primary_id?: string
+          specialist_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "provider_referrals_primary_id_fkey"
+            columns: ["primary_id"]
+            isOneToOne: false
+            referencedRelation: "providers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "provider_referrals_specialist_id_fkey"
+            columns: ["specialist_id"]
+            isOneToOne: false
+            referencedRelation: "providers"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       providers: {
         Row: {
           accepts_insurance: string[]
           id: string
+          is_primary: boolean
           location: string
           name: string
           npi_mock: string | null
@@ -288,6 +330,7 @@ export type Database = {
         Insert: {
           accepts_insurance?: string[]
           id?: string
+          is_primary?: boolean
           location: string
           name: string
           npi_mock?: string | null
@@ -296,6 +339,7 @@ export type Database = {
         Update: {
           accepts_insurance?: string[]
           id?: string
+          is_primary?: boolean
           location?: string
           name?: string
           npi_mock?: string | null

@@ -11,7 +11,9 @@ export type Patient = {
   preferred_language: string;
   accessibility_notes: string | null;
   persona_note: string | null;
+  primary_provider_id: string | null;
 };
+
 
 type Ctx = {
   patient: Patient | null;

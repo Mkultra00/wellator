@@ -20,11 +20,44 @@ export const listPatients = createServerFn({ method: "GET" }).handler(async () =
   const db = await admin();
   const { data, error } = await db
     .from("patients")
-    .select("id,full_name,dob,preferred_language,accessibility_notes,persona_note")
+    .select("id,full_name,dob,preferred_language,accessibility_notes,persona_note,primary_provider_id")
     .order("full_name");
   if (error) throw new Error(error.message);
   return data ?? [];
 });
+
+export const listReferralNetwork = createServerFn({ method: "GET" })
+  .inputValidator((d) => z.object({ patient_id: z.string().uuid() }).parse(d))
+  .handler(async ({ data }) => {
+    const db = await admin();
+    const { data: pat, error: pErr } = await db
+      .from("patients")
+      .select("primary_provider_id")
+      .eq("id", data.patient_id)
+      .single();
+    if (pErr) throw new Error(pErr.message);
+    const primaryId = pat?.primary_provider_id ?? null;
+
+    const { data: primary } = primaryId
+      ? await db
+          .from("providers")
+          .select("id,name,specialty,location,accepts_insurance,is_primary")
+          .eq("id", primaryId)
+          .maybeSingle()
+      : { data: null };
+
+    let specialists: any[] = [];
+    if (primaryId) {
+      const { data: refs, error: rErr } = await db
+        .from("provider_referrals")
+        .select("specialist:providers!provider_referrals_specialist_id_fkey(id,name,specialty,location,accepts_insurance,is_primary)")
+        .eq("primary_id", primaryId);
+      if (rErr) throw new Error(rErr.message);
+      specialists = (refs ?? []).map((r: any) => r.specialist).filter(Boolean);
+    }
+    return { primary: primary ?? null, specialists };
+  });
+
 
 export const listScheduledCalls = createServerFn({ method: "GET" }).handler(async () => {
   const db = await admin();
