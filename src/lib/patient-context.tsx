@@ -15,6 +15,8 @@ export type Patient = {
   address: string | null;
   latitude: number | null;
   longitude: number | null;
+  needed_specialties: string[];
+
 };
 
 
