@@ -320,6 +320,7 @@ export type Database = {
       providers: {
         Row: {
           accepts_insurance: string[]
+          distance_miles: number | null
           id: string
           is_primary: boolean
           location: string
@@ -329,6 +330,7 @@ export type Database = {
         }
         Insert: {
           accepts_insurance?: string[]
+          distance_miles?: number | null
           id?: string
           is_primary?: boolean
           location: string
@@ -338,6 +340,7 @@ export type Database = {
         }
         Update: {
           accepts_insurance?: string[]
+          distance_miles?: number | null
           id?: string
           is_primary?: boolean
           location?: string
