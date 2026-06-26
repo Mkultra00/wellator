@@ -140,6 +140,11 @@ export function ProviderPicker({ selectedIds, onChange, onConfirm }: Props) {
             Your primary doctor's referral network. Select every office you'd be willing to see —
             Mara batch-calls them and books the best match for your preferences.
           </p>
+          {data?.patient_address && (
+            <p className="mt-1 flex items-center gap-1 text-xs text-muted-foreground">
+              <MapPin className="h-3 w-3" /> Distances from {data.patient_address}
+            </p>
+          )}
         </div>
         <Badge variant="secondary" className="shrink-0">{selectedIds.length} selected</Badge>
       </div>
