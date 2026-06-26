@@ -12,6 +12,9 @@ export type Patient = {
   accessibility_notes: string | null;
   persona_note: string | null;
   primary_provider_id: string | null;
+  address: string | null;
+  latitude: number | null;
+  longitude: number | null;
 };
 
 
