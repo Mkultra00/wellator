@@ -119,7 +119,7 @@ function Index() {
 
           {active === "new_booking" && !provider && (
             <section>
-              <ProviderPicker selectedId={provider?.id} onSelect={setProvider} />
+              <ProviderPicker selectedId={null} onSelect={setProvider} />
             </section>
           )}
 
