@@ -39,7 +39,7 @@ const CARDS: CardDef[] = [
   {
     id: "new_booking",
     title: "Book an appointment",
-    body: "Browse our list of doctors and specialists, pick one, and Mara will call to book a visit on your behalf.",
+    body: "Pick a doctor or specialist from the list — Mara will call their office on your behalf to book the visit.",
     Icon: CalendarPlus,
   },
   {
@@ -128,8 +128,8 @@ function Index() {
               {active === "new_booking" && provider && (
                 <div className="flex items-center justify-between rounded-lg border border-border bg-muted/30 px-4 py-3">
                   <div className="text-sm">
-                    <span className="text-muted-foreground">Calling about: </span>
-                    <span className="font-medium">{provider.name}</span>
+                    <span className="text-muted-foreground">Mara is calling: </span>
+                    <span className="font-medium">{provider.name}'s office</span>
                     <span className="text-muted-foreground"> · {provider.specialty} · {provider.location}</span>
                   </div>
                   <Button variant="ghost" size="sm" onClick={() => setProvider(null)} className="gap-1">
