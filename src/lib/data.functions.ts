@@ -16,11 +16,30 @@ async function admin() {
   return supabaseAdmin;
 }
 
+const PROVIDER_COLS =
+  "id,name,specialty,location,accepts_insurance,is_primary,distance_miles,clinic_address,latitude,longitude";
+
+function haversineMiles(
+  a: { lat: number; lng: number },
+  b: { lat: number; lng: number },
+) {
+  const toRad = (d: number) => (d * Math.PI) / 180;
+  const R = 3958.7613;
+  const dLat = toRad(b.lat - a.lat);
+  const dLng = toRad(b.lng - a.lng);
+  const s =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(toRad(a.lat)) * Math.cos(toRad(b.lat)) * Math.sin(dLng / 2) ** 2;
+  return 2 * R * Math.asin(Math.sqrt(s));
+}
+
 export const listPatients = createServerFn({ method: "GET" }).handler(async () => {
   const db = await admin();
   const { data, error } = await db
     .from("patients")
-    .select("id,full_name,dob,preferred_language,accessibility_notes,persona_note,primary_provider_id")
+    .select(
+      "id,full_name,dob,preferred_language,accessibility_notes,persona_note,primary_provider_id,address,latitude,longitude",
+    )
     .order("full_name");
   if (error) throw new Error(error.message);
   return data ?? [];
@@ -32,30 +51,46 @@ export const listReferralNetwork = createServerFn({ method: "GET" })
     const db = await admin();
     const { data: pat, error: pErr } = await db
       .from("patients")
-      .select("primary_provider_id")
+      .select("primary_provider_id,latitude,longitude,address")
       .eq("id", data.patient_id)
       .single();
     if (pErr) throw new Error(pErr.message);
     const primaryId = pat?.primary_provider_id ?? null;
+    const patientLoc =
+      pat?.latitude != null && pat?.longitude != null
+        ? { lat: Number(pat.latitude), lng: Number(pat.longitude) }
+        : null;
+
+    const withDistance = (p: any) => {
+      if (!p) return p;
+      const miles =
+        patientLoc && p.latitude != null && p.longitude != null
+          ? haversineMiles(patientLoc, {
+              lat: Number(p.latitude),
+              lng: Number(p.longitude),
+            })
+          : p.distance_miles ?? null;
+      return { ...p, distance_miles: miles != null ? Number(miles.toFixed?.(1) ?? miles) : null };
+    };
 
     const { data: primary } = primaryId
-      ? await db
-          .from("providers")
-          .select("id,name,specialty,location,accepts_insurance,is_primary,distance_miles")
-          .eq("id", primaryId)
-          .maybeSingle()
+      ? await db.from("providers").select(PROVIDER_COLS).eq("id", primaryId).maybeSingle()
       : { data: null };
 
     let specialists: any[] = [];
     if (primaryId) {
       const { data: refs, error: rErr } = await db
         .from("provider_referrals")
-        .select("specialist:providers!provider_referrals_specialist_id_fkey(id,name,specialty,location,accepts_insurance,is_primary,distance_miles)")
+        .select(`specialist:providers!provider_referrals_specialist_id_fkey(${PROVIDER_COLS})`)
         .eq("primary_id", primaryId);
       if (rErr) throw new Error(rErr.message);
       specialists = (refs ?? []).map((r: any) => r.specialist).filter(Boolean);
     }
-    return { primary: primary ?? null, specialists };
+    return {
+      primary: withDistance(primary ?? null),
+      specialists: specialists.map(withDistance),
+      patient_address: pat?.address ?? null,
+    };
   });
 
 
