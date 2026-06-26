@@ -40,7 +40,9 @@ type Props = {
 export function ProviderPicker({ selectedIds, onChange, onConfirm }: Props) {
   const { patient } = usePatient();
   const [q, setQ] = useState("");
+  const [maxDistanceBySpecialty, setMaxDistanceBySpecialty] = useState<Record<string, number>>({});
   const fetchNetwork = useServerFn(listReferralNetwork);
+
 
   const { data, isLoading } = useQuery({
     enabled: !!patient?.id,
