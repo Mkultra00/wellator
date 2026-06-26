@@ -170,21 +170,56 @@ export function ProviderPicker({ selectedIds, onChange, onConfirm }: Props) {
               No specialist referrals match that search.
             </div>
           ) : (
-            <div className="space-y-5">
-              {grouped.map(([specialty, list]) => (
-                <div key={specialty}>
-                  <div className="mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                    <Stethoscope className="h-3.5 w-3.5" /> {specialty}
-                    <span className="text-muted-foreground/60">· {list.length} option{list.length === 1 ? "" : "s"}</span>
+            <div className="space-y-6">
+              {grouped.map(([specialty, list]) => {
+                const sorted = [...list].sort(
+                  (a, b) => (a.distance_miles ?? 9999) - (b.distance_miles ?? 9999),
+                );
+                const maxAvail = Math.max(10, ...sorted.map((p) => p.distance_miles ?? 0));
+                const cap = maxDistanceBySpecialty[specialty] ?? Math.ceil(maxAvail);
+                const visible = sorted.filter(
+                  (p) => (p.distance_miles ?? 0) <= cap,
+                );
+                return (
+                  <div key={specialty}>
+                    <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+                      <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                        <Stethoscope className="h-3.5 w-3.5" /> {specialty}
+                        <span className="text-muted-foreground/60">
+                          · {visible.length} of {list.length} within {cap} mi
+                        </span>
+                      </div>
+                      <div className="flex w-full items-center gap-3 sm:w-64">
+                        <span className="text-xs text-muted-foreground">Within</span>
+                        <Slider
+                          min={1}
+                          max={Math.ceil(maxAvail)}
+                          step={1}
+                          value={[cap]}
+                          onValueChange={(v) =>
+                            setMaxDistanceBySpecialty((m) => ({ ...m, [specialty]: v[0] }))
+                          }
+                          className="flex-1"
+                        />
+                        <span className="w-12 text-right text-xs font-medium">{cap} mi</span>
+                      </div>
+                    </div>
+                    {visible.length === 0 ? (
+                      <div className="text-sm text-muted-foreground">
+                        No {specialty.toLowerCase()} offices within {cap} mi.
+                      </div>
+                    ) : (
+                      <div className="grid gap-3 sm:grid-cols-2">
+                        {visible.map((p) => (
+                          <ProviderTile key={p.id} p={p} />
+                        ))}
+                      </div>
+                    )}
                   </div>
-                  <div className="grid gap-3 sm:grid-cols-2">
-                    {list.map((p) => (
-                      <ProviderTile key={p.id} p={p} />
-                    ))}
-                  </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
+
           )}
         </>
       )}
