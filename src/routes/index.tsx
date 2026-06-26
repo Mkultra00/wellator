@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import { AppShell } from "@/components/AppShell";
 import { VoicePanel, type Scenario } from "@/components/VoicePanel";
 import { ProviderPicker, type PickedProvider } from "@/components/ProviderPicker";
