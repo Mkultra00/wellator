@@ -53,17 +53,12 @@ function InboxPage() {
   const { patients, setPatientId, patient } = usePatient();
   const [active, setActive] = useState<Scheduled | null>(null);
   const qc = useQueryClient();
+  const fetchScheduled = useServerFn(listScheduledCalls);
+  const updateStatus = useServerFn(updateScheduledCallStatus);
 
   const { data, isLoading } = useQuery({
     queryKey: ["scheduled_calls"],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("scheduled_calls")
-        .select("id,patient_id,scenario,context,due_at,status,patients(full_name)")
-        .order("due_at", { ascending: true });
-      if (error) throw error;
-      return (data ?? []) as Scheduled[];
-    },
+    queryFn: async () => (await fetchScheduled()) as Scheduled[],
   });
 
   const answer = (call: Scheduled) => {
@@ -72,13 +67,14 @@ function InboxPage() {
   };
 
   const markDone = async (id: string) => {
-    await supabase.from("scheduled_calls").update({ status: "completed" }).eq("id", id);
+    await updateStatus({ data: { id, status: "completed" } });
     qc.invalidateQueries({ queryKey: ["scheduled_calls"] });
   };
   const skip = async (id: string) => {
-    await supabase.from("scheduled_calls").update({ status: "skipped" }).eq("id", id);
+    await updateStatus({ data: { id, status: "skipped" } });
     qc.invalidateQueries({ queryKey: ["scheduled_calls"] });
   };
+
 
   const activePatient = active ? patients.find((p) => p.id === active.patient_id) ?? patient : null;
 
