@@ -52,8 +52,10 @@ export function ProviderPicker({ selectedIds, onChange, onConfirm }: Props) {
         primary: PickedProvider | null;
         specialists: PickedProvider[];
         patient_address: string | null;
+        needed_specialties: string[];
       },
   });
+
 
   const primary = data?.primary ?? null;
   const specialists = data?.specialists ?? [];
