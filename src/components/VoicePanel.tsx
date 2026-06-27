@@ -128,13 +128,15 @@ export function VoicePanel({ patient, scenario, context, onClose }: Props) {
   }, [transcript]);
 
   const fetchToken = useServerFn(getElevenLabsConversationToken);
+  const runAnalyze = useServerFn(analyzeAttachment);
 
   const start = useCallback(async () => {
     setError(null);
     setConnecting(true);
     try {
       await navigator.mediaDevices.getUserMedia({ audio: true });
-      const { token } = await fetchToken();
+      const { token } = await fetchToken({ data: { variant: agentVariant } });
+
       const batch = context as
         | {
             providers?: { name: string; specialty: string; location: string }[];
