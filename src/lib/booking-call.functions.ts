@@ -598,7 +598,7 @@ export const generatePatientConfirmDialog = createServerFn({ method: "POST" })
         turns: [
           {
             speaker: "mara" as const,
-            text: `Hi ${data.patient_name.split(" ")[0]}, this is Mara. I was able to secure ${data.offers.length} appointment${data.offers.length === 1 ? "" : "s"} for you. Thank you so much for your time. I'll email the details now — please reply if anything needs to change. Take care.`,
+            text: `Hi ${data.patient_name.split(" ")[0]}, this is Mara. I was able to secure ${data.offers.length} appointment${data.offers.length === 1 ? "" : "s"} for you. Thank you so much for your time. I'll email the details now — please reply if anything needs to change. Goodbye, and take care!`,
           },
         ],
         outcome: {
