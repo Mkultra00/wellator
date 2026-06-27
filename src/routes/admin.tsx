@@ -1,8 +1,10 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
+import { useMemo } from "react";
 import { AppShell } from "@/components/AppShell";
 import { adminDashboardData } from "@/lib/data.functions";
+import { usePatient } from "@/lib/patient-context";
 import { Card } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
@@ -22,10 +24,14 @@ export const Route = createFileRoute("/admin")({
 });
 
 function AdminPage() {
+  const { patient } = usePatient();
   const fetchDashboard = useServerFn(adminDashboardData);
+  const sessionKey = useMemo(() => crypto.randomUUID(), []);
   const dash = useQuery({
-    queryKey: ["admin", "dashboard"],
-    queryFn: async () => await fetchDashboard(),
+    queryKey: ["admin", "dashboard", patient?.id ?? "none", sessionKey],
+    queryFn: async () =>
+      await fetchDashboard({ data: patient?.id ? { patient_id: patient.id } : {} }),
+    enabled: !!patient,
   });
 
   const apptsData = (dash.data?.appointments ?? []) as Array<{

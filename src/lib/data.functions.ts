@@ -259,31 +259,40 @@ export const listCallLogs = createServerFn({ method: "GET" })
     return rows ?? [];
   });
 
-export const adminDashboardData = createServerFn({ method: "GET" }).handler(async () => {
-  const db = await admin();
-  const [appts, calls, feedback] = await Promise.all([
-    db
+export const adminDashboardData = createServerFn({ method: "GET" })
+  .inputValidator((d) => z.object({ patient_id: z.string().optional() }).optional().parse(d))
+  .handler(async ({ data }) => {
+    const db = await admin();
+    const patientId = data?.patient_id;
+    let apptsQ = db
       .from("appointments")
       .select("id,starts_at,status,reason,patient_id,provider_id,patients(full_name),providers(name,specialty,location)")
       .order("starts_at", { ascending: false })
-      .limit(50),
-    db
+      .limit(50);
+    let callsQ = db
       .from("call_logs")
       .select("id,scenario,outcome,started_at,ended_at,transcript,human_transfer_requested,transfer_reason,patient_id,patients(full_name)")
       .order("started_at", { ascending: false })
-      .limit(50),
-    db
+      .limit(50);
+    let feedbackQ = db
       .from("pt_feedback")
       .select("id,pain_0_10,mobility_change,adherence,comment,recorded_at,patient_id,patients(full_name)")
       .order("recorded_at", { ascending: false })
-      .limit(50),
-  ]);
-  if (appts.error) throw new Error(appts.error.message);
-  if (calls.error) throw new Error(calls.error.message);
-  if (feedback.error) throw new Error(feedback.error.message);
-  return {
-    appointments: appts.data ?? [],
-    call_logs: calls.data ?? [],
-    pt_feedback: feedback.data ?? [],
-  };
-});
+      .limit(50);
+
+    if (patientId) {
+      apptsQ = apptsQ.eq("patient_id", patientId);
+      callsQ = callsQ.eq("patient_id", patientId);
+      feedbackQ = feedbackQ.eq("patient_id", patientId);
+    }
+
+    const [appts, calls, feedback] = await Promise.all([apptsQ, callsQ, feedbackQ]);
+    if (appts.error) throw new Error(appts.error.message);
+    if (calls.error) throw new Error(calls.error.message);
+    if (feedback.error) throw new Error(feedback.error.message);
+    return {
+      appointments: appts.data ?? [],
+      call_logs: calls.data ?? [],
+      pt_feedback: feedback.data ?? [],
+    };
+  });
