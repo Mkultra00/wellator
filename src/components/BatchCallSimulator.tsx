@@ -832,7 +832,44 @@ function FinalReport({
                   )}
                 </div>
 
+                {isOffered && c.decision !== "cancelled" && (() => {
+                  const prep = ((c.outcome as any)?.prep ?? []) as Array<{
+                    text: string;
+                    category: string;
+                    bookable: boolean;
+                  }>;
+                  if (prep.length === 0) return null;
+                  return (
+                    <div className="mt-2 rounded border border-border bg-muted/40 p-2">
+                      <div className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                        Before this visit
+                      </div>
+                      <ul className="space-y-0.5 text-xs">
+                        {prep.map((p, pi) => (
+                          <li key={pi} className="flex items-start gap-1.5">
+                            <span className="mt-0.5 inline-flex h-1.5 w-1.5 shrink-0 rounded-full bg-primary" />
+                            <span>
+                              {p.text}{" "}
+                              <Badge
+                                variant="outline"
+                                className={cn(
+                                  "ml-1 text-[9px] uppercase",
+                                  p.bookable && "border-amber-500 text-amber-700",
+                                )}
+                              >
+                                {p.category.replace("_", " ")}
+                                {p.bookable && " · Mara will book"}
+                              </Badge>
+                            </span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  );
+                })()}
+
               </div>
+
 
               <div className="flex flex-wrap gap-2">
                 {isOffered && c.decision !== "accepted" && c.decision !== "cancelled" && (
