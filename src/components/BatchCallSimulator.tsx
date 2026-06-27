@@ -146,11 +146,18 @@ export function BatchCallSimulator({ patient, providers, preferences, onReset, o
     });
   }
 
-  async function runOne(idx: number) {
-    const provider = providers[idx];
+  async function runOne(
+    idx: number,
+    provider: PickedProvider,
+    opts?: { recall_reason?: string; previous_slot?: string | null },
+  ) {
     setCalls((prev) =>
       prev.map((c, i) => (i === idx ? { ...c, status: "live", turns: [], revealed: 0 } : c)),
     );
+    const recallNote = opts?.recall_reason
+      ? `Patient asked to reschedule — ${opts.recall_reason}`
+      : null;
+    const mergedNotes = [preferences.notes, recallNote].filter(Boolean).join(". ");
     let dialog;
     try {
       dialog = await genDialog({
@@ -166,8 +173,10 @@ export function BatchCallSimulator({ patient, providers, preferences, onReset, o
             days: preferences.days,
             time_of_day: preferences.time_of_day,
             max_distance_miles: preferences.max_distance_miles,
-            notes: preferences.notes,
+            notes: mergedNotes || preferences.notes,
           },
+          recall_reason: opts?.recall_reason ?? null,
+          previous_slot: opts?.previous_slot ?? null,
         },
       });
     } catch (e) {
@@ -202,7 +211,6 @@ export function BatchCallSimulator({ patient, providers, preferences, onReset, o
       prev.map((c, i) => (i === idx ? { ...c, status: "done", outcome: dialog.outcome } : c)),
     );
 
-    // Persist to call_logs so the inbox can show transcripts + status.
     persistCall({
       data: {
         patient_id: patient.id,
@@ -219,6 +227,7 @@ export function BatchCallSimulator({ patient, providers, preferences, onReset, o
           provider_name: provider.name,
           provider_specialty: provider.specialty,
           provider_location: provider.location,
+          recall_reason: opts?.recall_reason ?? null,
           status:
             dialog.outcome.kind === "offered"
               ? "booked"
@@ -237,7 +246,8 @@ export function BatchCallSimulator({ patient, providers, preferences, onReset, o
     for (let i = 0; i < providers.length; i++) {
       if (cancelRef.current) return;
       setActiveIdx(i);
-      await runOne(i);
+      await runOne(i, providers[i]);
+
     }
     setPhase("finished");
   }, [providers.length]);
