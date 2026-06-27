@@ -335,7 +335,7 @@ export function BatchCallSimulator({ patient, providers, preferences, onReset, o
 
   async function prepareDialog(
     provider: PickedProvider,
-    opts?: { recall_reason?: string; previous_slot?: string | null },
+    opts?: { recall_reason?: string; previous_slot?: string | null; busy_slots?: string[] },
   ): Promise<PreparedDialog | null> {
     const recallNote = opts?.recall_reason ? `Patient asked to reschedule — ${opts.recall_reason}` : null;
     const mergedNotes = [preferences.notes, recallNote].filter(Boolean).join(". ");
@@ -359,6 +359,7 @@ export function BatchCallSimulator({ patient, providers, preferences, onReset, o
             },
             recall_reason: opts?.recall_reason ?? null,
             previous_slot: opts?.previous_slot ?? null,
+            busy_slots: opts?.busy_slots ?? [],
           },
         }),
         new Promise<PreparedDialog>((resolve) =>
