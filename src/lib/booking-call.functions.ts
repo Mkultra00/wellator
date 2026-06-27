@@ -267,7 +267,7 @@ function deterministicAvailabilityDialog(args: {
         { speaker: "mara" as const, text: `The referral is from ${args.referringDoctor ?? "the primary care doctor on file"}, and the patient has ${insuranceLine}.` },
         { speaker: "office" as const, text: "I checked the calendar live, and I'm sorry — we do not have availability in that requested window." },
         { speaker: "office" as const, text: "The next open appointment is about three weeks out, so I would recommend trying another specialist on the list." },
-        { speaker: "mara" as const, text: "I understand, and I really appreciate your time. Thank you, and have a wonderful day." },
+        { speaker: "mara" as const, text: "I understand, and I really appreciate your time. Thank you so much, and have a wonderful day. Goodbye!" },
       ],
       outcome: { kind: "no_availability" as const },
     };
@@ -283,7 +283,7 @@ function deterministicAvailabilityDialog(args: {
       { speaker: "office" as const, text: `Done — ${args.data.patient_name} is booked with ${args.data.provider_name} on ${slot}.` },
       { speaker: "mara" as const, text: "Wonderful, thank you so much. Could you please tell me if there's anything the patient should bring or have done before the visit — referral, recent records, bloodwork, imaging, or EKG?" },
       { speaker: "office" as const, text: prep.map((p) => p.text).join(". ") + "." },
-      { speaker: "mara" as const, text: "Thank you kindly for all your help today. We really appreciate it." },
+      { speaker: "mara" as const, text: "Thank you kindly for all your help today. We really appreciate it. Goodbye, and take care!" },
     ],
     outcome: { kind: "offered" as const, slot, prep },
   };
