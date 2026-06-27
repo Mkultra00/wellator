@@ -73,8 +73,10 @@ type Props = {
 };
 
 const DIALOG_TIMEOUT_MS = 3000;
-const TTS_TIMEOUT_MS = 3000;
-const AUDIO_TIMEOUT_MS = 6000;
+const TTS_TIMEOUT_MS = 8000;
+// Safety cap only — actual end is detected via `onended`.
+const AUDIO_MAX_MS = 60000;
+const TURN_GAP_MS = 250;
 
 export function BatchCallSimulator({ patient, providers, preferences, onReset, onClose }: Props) {
   const [calls, setCalls] = useState<CallState[]>(() =>
