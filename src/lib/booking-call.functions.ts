@@ -186,7 +186,25 @@ OPENING_LINE (Mara's first turn must use this verbatim, then optionally add one 
     });
     if (!res.ok) {
       const t = await res.text().catch(() => "");
-      throw new Error(`Gateway ${res.status}: ${t}`);
+      // Gracefully degrade so the simulator can continue with a transcript-only
+      // fallback instead of crashing the UI (e.g. workspace credit limit 403).
+      console.warn(`[generateBookingDialog] Gateway ${res.status}: ${t}`);
+      return {
+        turns: [
+          {
+            speaker: "mara" as const,
+            text: canonicalOpeningLine,
+          },
+          {
+            speaker: "office" as const,
+            text: `Thanks for calling. Our scheduling system is briefly unavailable — I'll take a message for ${data.provider_name}'s team and have them call back.`,
+          },
+        ],
+        outcome: { kind: "voicemail" as const },
+        office_voice_id: pickOfficeVoice(data.provider_name),
+        mara_voice_id: MARA_VOICE,
+        gateway_error: res.status === 403 ? "credit_limit_reached" : `gateway_${res.status}`,
+      };
     }
     const json = await res.json();
     const content = json?.choices?.[0]?.message?.content ?? "{}";
