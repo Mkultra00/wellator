@@ -487,7 +487,7 @@ export function BatchCallSimulator({ patient, providers, preferences, onReset, o
     setCalls((prev) =>
       prev.map((c, i) => (i === idx ? { ...c, status: "live", turns: [], revealed: 0 } : c)),
     );
-    const dialog = await prepareDialog(provider, opts);
+    let dialog = await prepareDialog(provider, opts);
     if (!dialog) {
       setCalls((prev) =>
         prev.map((c, i) =>
@@ -505,6 +505,14 @@ export function BatchCallSimulator({ patient, providers, preferences, onReset, o
           recall_reason: `the offered time ${offeredSlot} conflicts with ${conflictWith}; please give a different day or a time at least one hour away`,
           previous_slot: offeredSlot,
         });
+        if (!dialog) {
+          setCalls((prev) =>
+            prev.map((c, i) =>
+              i === idx ? { ...c, status: "done", outcome: { kind: "no_availability" } } : c,
+            ),
+          );
+          return;
+        }
       }
     }
     await playDialog(idx, provider, dialog);
