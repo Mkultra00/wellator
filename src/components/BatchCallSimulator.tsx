@@ -89,6 +89,15 @@ export function BatchCallSimulator({ patient, providers, preferences, onReset, o
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const cancelRef = useRef(false);
   const [ctx, setCtx] = useState<{ referring_doctor: string | null; insurance: any } | null>(null);
+  const [escalations, setEscalations] = useState<
+    Array<{
+      specialty: string;
+      declined_provider_id: string;
+      declined_provider_name: string;
+      reason: string;
+      created_at: string;
+    }>
+  >([]);
 
   const genDialog = useServerFn(generateBookingDialog);
   const genConfirm = useServerFn(generatePatientConfirmDialog);
@@ -99,6 +108,7 @@ export function BatchCallSimulator({ patient, providers, preferences, onReset, o
 
   const [network, setNetwork] = useState<{ specialists: PickedProvider[] } | null>(null);
   const patientConfirmedRef = useRef(false);
+
 
   const startedRef = useRef(false);
 
@@ -408,9 +418,42 @@ export function BatchCallSimulator({ patient, providers, preferences, onReset, o
           )
           .sort((a, b) => (a.distance_miles ?? 9999) - (b.distance_miles ?? 9999))[0];
         if (!alt) {
-          toast(`No alternative ${declinedCall.provider.specialty} available in network.`);
+          const esc = {
+            specialty: declinedCall.provider.specialty,
+            declined_provider_id: declinedCall.provider.id,
+            declined_provider_name: declinedCall.provider.name,
+            reason: `Patient declined ${declinedCall.provider.name} and no other in-network ${declinedCall.provider.specialty} remains. Escalating to human care coordinator.`,
+            created_at: new Date().toISOString(),
+          };
+          setEscalations((prev) =>
+            prev.some((e) => e.declined_provider_id === esc.declined_provider_id) ? prev : [...prev, esc],
+          );
+          persistCall({
+            data: {
+              patient_id: patient.id,
+              scenario: "human_escalation",
+              transcript: [
+                {
+                  speaker: "system",
+                  text: `Mara exhausted in-network ${esc.specialty} options for ${patient.full_name}. Human care coordinator will call the patient directly.`,
+                },
+              ],
+              outcome: JSON.stringify({
+                kind: "human_escalation",
+                status: "needs_human",
+                specialty: esc.specialty,
+                declined_provider_id: esc.declined_provider_id,
+                declined_provider_name: esc.declined_provider_name,
+                reason: esc.reason,
+              }),
+            },
+          }).catch(() => {});
+          toast.warning(`Escalated to care coordinator: no other ${esc.specialty} in network`, {
+            description: "A human will call the patient directly.",
+          });
           continue;
         }
+
         usedIds.add(alt.id);
         followupTasks.push(async () => {
           let newIdx = -1;
@@ -557,12 +600,14 @@ export function BatchCallSimulator({ patient, providers, preferences, onReset, o
           preferences={preferences}
           bestIdx={best}
           confirmedIdx={confirmedIdx}
+          escalations={escalations}
           onAccept={confirmBooking}
           onRecall={recallOne}
           onCancel={cancelOne}
           onPickMore={onReset}
         />
       )}
+
     </Card>
   );
 }
@@ -644,6 +689,7 @@ function FinalReport({
   preferences,
   bestIdx,
   confirmedIdx,
+  escalations,
   onAccept,
   onRecall,
   onCancel,
@@ -653,6 +699,13 @@ function FinalReport({
   preferences: BookingPrefs;
   bestIdx: number | null;
   confirmedIdx: number | null;
+  escalations: Array<{
+    specialty: string;
+    declined_provider_id: string;
+    declined_provider_name: string;
+    reason: string;
+    created_at: string;
+  }>;
   onAccept: (i: number) => void;
   onRecall: (i: number) => void;
   onCancel: (i: number) => void;
@@ -670,6 +723,30 @@ function FinalReport({
         <Trophy className="h-4 w-4 text-amber-600" />
         <div className="text-sm font-semibold uppercase tracking-wider">Final report</div>
       </div>
+
+      {escalations.length > 0 && (
+        <div className="mb-4 rounded-md border-2 border-amber-500/60 bg-amber-50/60 p-3 dark:bg-amber-950/20">
+          <div className="mb-2 flex items-center gap-2 text-sm font-semibold text-amber-800 dark:text-amber-300">
+            <UserRound className="h-4 w-4" />
+            Escalated to human care coordinator ({escalations.length})
+          </div>
+          <ul className="space-y-1.5 text-xs text-amber-900 dark:text-amber-200">
+            {escalations.map((e) => (
+              <li key={e.declined_provider_id} className="flex flex-wrap items-start gap-1.5">
+                <Badge variant="outline" className="border-amber-600 text-amber-800 dark:text-amber-300">
+                  {e.specialty}
+                </Badge>
+                <span>{e.reason}</span>
+              </li>
+            ))}
+          </ul>
+          <div className="mt-2 text-[11px] italic text-amber-700 dark:text-amber-400">
+            A human coordinator will call the patient directly. Logged in Scheduled calls as "human_escalation".
+          </div>
+        </div>
+      )}
+
+
 
       <div className="mb-4 grid grid-cols-2 gap-2 text-xs sm:grid-cols-5">
         <Stat label="Called" value={calls.length} />

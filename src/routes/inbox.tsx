@@ -83,7 +83,13 @@ const STATUS_META: Record<
     tone: "border-destructive text-destructive",
     icon: XCircle,
   },
+  needs_human: {
+    label: "Escalated to human coordinator",
+    tone: "border-amber-600 text-amber-800",
+    icon: AlertCircle,
+  },
 };
+
 
 function parseOutcome(raw: string | null): OutcomeInfo {
   if (!raw) return {};
@@ -99,11 +105,15 @@ function callerLabel(log: CallLog, outcome: OutcomeInfo): string {
   if (log.scenario === "patient_confirmation") {
     return `Mara → ${patient}`;
   }
+  if (log.scenario === "human_escalation") {
+    return `Human coordinator → ${patient}`;
+  }
   if (outcome.provider_name) {
     return `Mara → ${outcome.provider_name}'s office (for ${patient})`;
   }
   return `Mara (for ${patient})`;
 }
+
 
 function InboxPage() {
   const fetchLogs = useServerFn(listCallLogs);
