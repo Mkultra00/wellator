@@ -284,7 +284,7 @@ function VoicePanelInner({ patient, scenario, context, onClose }: Props) {
   const isSpeaking = conversation.isSpeaking;
 
   return (
-    <Card className="overflow-hidden border-2">
+    <Card ref={panelRef} className="overflow-hidden border-2">
       <div
         className={cn(
           "flex flex-col gap-4 p-6 transition-colors",
