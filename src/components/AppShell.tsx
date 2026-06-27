@@ -51,13 +51,20 @@ export function AppShell({ children }: { children: ReactNode }) {
             <img
               src={avatarAsset.url}
               alt="Mara"
-              className="h-[72px] w-[72px] rounded-full object-cover ring-2 ring-primary/20"
-              width={72}
-              height={72}
+              className={cn(
+                "rounded-full object-cover ring-2 ring-primary/20",
+                pathname === "/" ? "h-[144px] w-[144px]" : "h-[72px] w-[72px]",
+              )}
+              width={pathname === "/" ? 144 : 72}
+              height={pathname === "/" ? 144 : 72}
             />
             <div className="leading-tight">
-              <div className="text-3xl font-semibold text-foreground">Mara</div>
-              <div className="text-sm text-muted-foreground">AI Care Navigator</div>
+              <div className={cn("font-semibold text-foreground", pathname === "/" ? "text-6xl" : "text-3xl")}>
+                Mara
+              </div>
+              <div className={cn("text-muted-foreground", pathname === "/" ? "text-xl" : "text-sm")}>
+                AI Care Navigator
+              </div>
             </div>
           </Link>
 
