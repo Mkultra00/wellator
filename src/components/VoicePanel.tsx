@@ -48,7 +48,16 @@ type Props = {
   onClose?: () => void;
 };
 
-export function VoicePanel({ patient, scenario, context, onClose }: Props) {
+export function VoicePanel(props: Props) {
+  return (
+    <ConversationProvider>
+      <VoicePanelInner {...props} />
+    </ConversationProvider>
+  );
+}
+
+function VoicePanelInner({ patient, scenario, context, onClose }: Props) {
+
   const [connecting, setConnecting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [transcript, setTranscript] = useState<Turn[]>([]);
