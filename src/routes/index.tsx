@@ -6,10 +6,11 @@ import { ProviderPicker, type PickedProvider } from "@/components/ProviderPicker
 import { BookingPreferences, type BookingPrefs } from "@/components/BookingPreferences";
 import { BatchCallSimulator } from "@/components/BatchCallSimulator";
 import { usePatient } from "@/lib/patient-context";
+import { BookAppointmentIcon, TalkToMaraIcon } from "@/components/ColorfulIcons";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { CalendarPlus, FileText, ArrowRight, ArrowLeft } from "lucide-react";
+import { ArrowRight, ArrowLeft } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/")({
