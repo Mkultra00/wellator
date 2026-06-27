@@ -719,12 +719,18 @@ function FinalReport({
                     ? `✅ Booked — ${slot}`
                     : c.decision === "cancelled"
                       ? "❌ Cancelled by patient"
-                      : isOffered
-                        ? `Offered ${slot}`
-                        : c.outcome?.kind === "voicemail"
-                          ? "Left voicemail — no live response"
-                          : "No availability"}
+                      : c.decision === "rejected"
+                        ? "🚫 Patient declined this doctor — finding alternative"
+                        : isOffered
+                          ? `Offered ${slot}`
+                          : c.outcome?.kind === "voicemail"
+                            ? "Left voicemail — no live response"
+                            : "No availability"}
+                  {c.recall_reason && c.decision !== "rejected" && (
+                    <span className="ml-1 italic">· recalled: {c.recall_reason}</span>
+                  )}
                 </div>
+
               </div>
 
               <div className="flex flex-wrap gap-2">
