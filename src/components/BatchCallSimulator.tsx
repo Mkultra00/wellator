@@ -281,7 +281,12 @@ export function BatchCallSimulator({ patient, providers, preferences, onReset, o
         provider_name: c.provider.name,
         specialty: c.provider.specialty,
         location: c.provider.location,
-        slot: (c.outcome as { slot: string }).slot,
+        slot: (c.outcome as { slot: string; prep?: any[] }).slot,
+        prep: ((c.outcome as any).prep ?? []) as Array<{
+          text: string;
+          category: string;
+          bookable: boolean;
+        }>,
       }));
     if (offers.length === 0) return;
     let cancelled = false;
@@ -330,16 +335,35 @@ export function BatchCallSimulator({ patient, providers, preferences, onReset, o
       );
 
       const acceptedOffers = offers.filter((o) => accepted.has(o.provider_id));
-      const subject = `Your appointment ${acceptedOffers.length === 1 ? "is" : "s are"} ready to confirm`;
-      const lines = (acceptedOffers.length > 0 ? acceptedOffers : offers)
-        .map((o) => `• ${o.provider_name} (${o.specialty}) — ${o.slot}\n  ${o.location}`)
-        .join("\n");
+      const offersForEmail = acceptedOffers.length > 0 ? acceptedOffers : offers;
+      const subject = `Your appointment${acceptedOffers.length === 1 ? "" : "s"} & prep checklist`;
+      const lines = offersForEmail
+        .map((o) => {
+          const prepLines = (o.prep ?? []).length
+            ? "\n   Before this visit:\n" +
+              (o.prep ?? [])
+                .map(
+                  (p) =>
+                    `     • ${p.text}${p.bookable ? "  ← Mara will book this for you" : ""}`,
+                )
+                .join("\n")
+            : "";
+          return `• ${o.provider_name} (${o.specialty}) — ${o.slot}\n  ${o.location}${prepLines}`;
+        })
+        .join("\n\n");
+      const bookable = offersForEmail.flatMap((o) =>
+        (o.prep ?? [])
+          .filter((p) => p.bookable)
+          .map((p) => `${p.text} (for ${o.provider_name})`),
+      );
       const followups: string[] = [];
       if (callbacks.length > 0)
         followups.push(`I'll call ${callbacks.length} office${callbacks.length === 1 ? "" : "s"} back to reschedule.`);
       if (declined.size > 0)
         followups.push(`I'll find ${declined.size === 1 ? "an alternative doctor" : `${declined.size} alternative doctors`} from your referral list.`);
-      const body = `Hi ${patient.full_name.split(" ")[0]},\n\nThis is Mara following up on our call. Confirmed appointment${acceptedOffers.length === 1 ? "" : "s"}:\n\n${lines || "(none yet — see below)"}\n\n${followups.join(" ")}\n\nReply YES to confirm, or call us back any time.\n\n— Mara, your care navigator`;
+      if (bookable.length > 0)
+        followups.push(`I'll add ${bookable.length} test${bookable.length === 1 ? "" : "s"} (lab/imaging) to your booking list so I can schedule those too.`);
+      const body = `Hi ${patient.full_name.split(" ")[0]},\n\nThis is Mara following up on our call. Here's what we lined up:\n\n${lines || "(none yet — see below)"}\n\n${followups.join(" ")}\n\nReply YES to confirm, or call us back any time.\n\n— Mara, your care navigator`;
       setEmailSent({
         to: `${patient.full_name.toLowerCase().replace(/\s+/g, ".")}@example.com`,
         subject,
@@ -808,7 +832,44 @@ function FinalReport({
                   )}
                 </div>
 
+                {isOffered && c.decision !== "cancelled" && (() => {
+                  const prep = ((c.outcome as any)?.prep ?? []) as Array<{
+                    text: string;
+                    category: string;
+                    bookable: boolean;
+                  }>;
+                  if (prep.length === 0) return null;
+                  return (
+                    <div className="mt-2 rounded border border-border bg-muted/40 p-2">
+                      <div className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                        Before this visit
+                      </div>
+                      <ul className="space-y-0.5 text-xs">
+                        {prep.map((p, pi) => (
+                          <li key={pi} className="flex items-start gap-1.5">
+                            <span className="mt-0.5 inline-flex h-1.5 w-1.5 shrink-0 rounded-full bg-primary" />
+                            <span>
+                              {p.text}{" "}
+                              <Badge
+                                variant="outline"
+                                className={cn(
+                                  "ml-1 text-[9px] uppercase",
+                                  p.bookable && "border-amber-500 text-amber-700",
+                                )}
+                              >
+                                {p.category.replace("_", " ")}
+                                {p.bookable && " · Mara will book"}
+                              </Badge>
+                            </span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  );
+                })()}
+
               </div>
+
 
               <div className="flex flex-wrap gap-2">
                 {isOffered && c.decision !== "accepted" && c.decision !== "cancelled" && (

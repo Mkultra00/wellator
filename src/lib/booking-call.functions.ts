@@ -57,8 +57,23 @@ const DialogInput = z.object({
 
 
 export type DialogTurn = { speaker: "mara" | "office"; text: string };
+export type PrepItem = {
+  /** e.g. "Bring photo ID and insurance card", "Fasting bloodwork (LabCorp)", "Chest X-ray within 30 days" */
+  text: string;
+  /** how the patient handles it */
+  category:
+    | "bring" // bring with you (ID, list of meds, paperwork)
+    | "pcp_send" // ask primary care to fax / send records or referral
+    | "lab" // bloodwork — bookable
+    | "imaging" // x-ray, MRI, CT — bookable
+    | "cardiac" // EKG, stress test — bookable
+    | "in_office" // specialist will do it in office, no action needed
+    | "other";
+  /** true when the patient needs a separate appointment to get it done */
+  bookable: boolean;
+};
 export type DialogOutcome =
-  | { kind: "offered"; slot: string }
+  | { kind: "offered"; slot: string; prep?: PrepItem[] }
   | { kind: "voicemail" }
   | { kind: "no_availability" };
 
@@ -75,7 +90,7 @@ export const generateBookingDialog = createServerFn({ method: "POST" })
       prefs.preferred_locations ? ` near ${prefs.preferred_locations}` : ""
     }${prefs.notes ? `. Notes: ${prefs.notes}` : ""}`;
 
-    const system = `You generate realistic short phone-call transcripts between Mara (an AI care navigator calling on behalf of a patient) and a receptionist at a doctor's office. Output ONLY valid JSON matching: {"turns":[{"speaker":"mara"|"office","text":"..."}], "outcome": {"kind":"offered","slot":"..."} | {"kind":"voicemail"} | {"kind":"no_availability"}}. 6-10 turns. Natural, concise spoken lines (1-2 sentences each). In her OPENING turn Mara must: identify herself as an AI care navigator, name the patient, name the referring primary care doctor (if provided), and state the patient's insurance payer + plan (if provided). Then request an appointment matching preferences. If this is a CALLBACK (the user prompt will say so), Mara opens by saying she's calling back about the previously offered slot, explains the patient asked to reschedule and gives the reason (day vs time), and asks for an alternative that fits. Receptionist either offers a specific slot (day + time), says no availability for ~2 weeks, or it's a voicemail (then only 1-2 turns, Mara leaves a message). Vary outcomes naturally — ~65% offered, ~20% no_availability, ~15% voicemail.`;
+    const system = `You generate realistic short phone-call transcripts between Mara (an AI care navigator calling on behalf of a patient) and a receptionist at a doctor's office. Output ONLY valid JSON matching: {"turns":[{"speaker":"mara"|"office","text":"..."}], "outcome": {"kind":"offered","slot":"...","prep":[{"text":"...","category":"bring"|"pcp_send"|"lab"|"imaging"|"cardiac"|"in_office"|"other","bookable":true|false}]} | {"kind":"voicemail"} | {"kind":"no_availability"}}. 6-12 turns. Natural, concise spoken lines (1-2 sentences each). In her OPENING turn Mara must: identify herself as an AI care navigator, name the patient, name the referring primary care doctor (if provided), and state the patient's insurance payer + plan (if provided). Then request an appointment matching preferences. If this is a CALLBACK (the user prompt will say so), Mara opens by saying she's calling back about the previously offered slot, explains the patient asked to reschedule and gives the reason (day vs time), and asks for an alternative that fits. When the office OFFERS a slot, BEFORE the call wraps Mara must ask: "Is there anything the patient should bring or have done before the visit — referral, recent records, bloodwork, imaging, EKG?" The receptionist answers with 1-4 specific prep items appropriate to the specialty (e.g. cardiology often wants a recent EKG + lipid panel; orthopedics wants recent imaging of the affected joint; GI may want fasting bloodwork; many want a referral from PCP + photo ID + insurance card + medication list). For each item, encode it in outcome.prep with the correct category and set bookable=true ONLY if it requires a separate appointment somewhere else (lab draw, imaging center, outpatient EKG). If the specialist will do it in their office, use category "in_office" and bookable=false. Receptionist either offers a specific slot (day + time), says no availability for ~2 weeks, or it's a voicemail (then only 1-2 turns, Mara leaves a message, no prep). Vary outcomes naturally — ~65% offered, ~20% no_availability, ~15% voicemail.`;
 
     const insLine = data.insurance
       ? `Insurance: ${data.insurance.payer ?? "Unknown payer"}${data.insurance.plan ? ` — ${data.insurance.plan}` : ""}${data.insurance.member_id ? ` (member ${data.insurance.member_id})` : ""}${data.insurance.referral_required ? " — referral required" : ""}`
@@ -181,6 +196,24 @@ const ConfirmInput = z.object({
         specialty: z.string(),
         location: z.string(),
         slot: z.string(),
+        prep: z
+          .array(
+            z.object({
+              text: z.string(),
+              category: z.enum([
+                "bring",
+                "pcp_send",
+                "lab",
+                "imaging",
+                "cardiac",
+                "in_office",
+                "other",
+              ]),
+              bookable: z.boolean(),
+            }),
+          )
+          .optional()
+          .default([]),
       }),
     )
     .min(1),
@@ -205,14 +238,23 @@ export const generatePatientConfirmDialog = createServerFn({ method: "POST" })
     const apiKey = process.env.LOVABLE_API_KEY;
     if (!apiKey) throw new Error("LOVABLE_API_KEY not configured");
 
-    const system = `You generate a short realistic phone-call transcript where Mara (AI care navigator) calls the elderly patient to review the appointment slots she just secured and asks the patient to confirm. Output ONLY JSON: {"turns":[{"speaker":"mara"|"patient","text":"..."}], "outcome":{"accepted_provider_ids":["..."],"declined_provider_ids":["..."],"callback_requests":[{"provider_id":"...","reason":"...","change":"day"|"time"|"other"}],"notes":"..."}}. 8-14 turns. Warm, slow, clear language for an older adult. Mara opens by greeting the patient by first name, says she called the offices, then lists each offer (provider, specialty, day/time). She asks the patient if each time works. For EACH offer the patient does one of three things: (a) accept it, (b) reject the doctor outright ("I'd rather see someone else") — goes into declined_provider_ids, or (c) ask Mara to call back to reschedule. When the patient asks for a callback, Mara MUST ask a follow-up: "Is it the day or the time that doesn't work?" The patient answers (e.g. "the time — mornings are better" or "not Tuesday, try later in the week"). Encode that as a callback_request with change="day" or "time" and a short reason. Aim to include at least one callback_request when there are 2+ offers so the flow is realistic. End with Mara confirming next steps, that she'll call back the offices that need rescheduling, find alternatives for any declined doctors, and that a confirmation email is on the way.`;
+    const system = `You generate a short realistic phone-call transcript where Mara (AI care navigator) calls the elderly patient to review the appointment slots she just secured AND walk through everything the patient needs to do before each visit. Output ONLY JSON: {"turns":[{"speaker":"mara"|"patient","text":"..."}], "outcome":{"accepted_provider_ids":["..."],"declined_provider_ids":["..."],"callback_requests":[{"provider_id":"...","reason":"...","change":"day"|"time"|"other"}],"notes":"..."}}. 10-18 turns. Warm, slow, clear language for an older adult. Mara opens by greeting the patient by first name and says she has good news — she got through to the offices. For EACH offer she: (1) clearly states the doctor, specialty, day and time, and clinic location; (2) reads out the prep checklist for that visit — what to bring (ID, insurance card, medication list), what to ask the primary care doctor to send (referral, recent notes/records), and any tests required beforehand (bloodwork, X-ray, EKG). For each test she tells the patient whether the specialist's office will do it in-house OR whether Mara needs to book it separately at a lab/imaging center. Mara explicitly says: "I'll add the bloodwork/imaging to your booking list so I can schedule that too." (3) asks the patient if the day and time work. For EACH offer the patient does one of three things: (a) accept it, (b) reject the doctor outright ("I'd rather see someone else") — goes into declined_provider_ids, or (c) ask Mara to call back to reschedule. When the patient asks for a callback, Mara MUST ask a follow-up: "Is it the day or the time that doesn't work?" The patient answers (e.g. "the time — mornings are better" or "not Tuesday, try later in the week"). Encode that as a callback_request with change="day" or "time" and a short reason. Aim to include at least one callback_request when there are 2+ offers so the flow is realistic. End with Mara recapping the to-do list (call your primary for the referral, fast for 12 hours before the lab, etc.), saying she'll handle the office callbacks, find alternatives for any declined doctor, book any required labs/imaging, and that a confirmation email with the full checklist is on the way.`;
 
 
     const offerLines = data.offers
-      .map(
-        (o, i) =>
-          `${i + 1}. ${o.provider_name} (${o.specialty}) at ${o.location} — ${o.slot} [id:${o.provider_id}]`,
-      )
+      .map((o, i) => {
+        const prepLine =
+          (o.prep ?? []).length > 0
+            ? "\n   Prep required:\n" +
+              (o.prep ?? [])
+                .map(
+                  (p) =>
+                    `     - [${p.category}${p.bookable ? ", BOOKABLE" : ""}] ${p.text}`,
+                )
+                .join("\n")
+            : "\n   Prep required: none specified";
+        return `${i + 1}. ${o.provider_name} (${o.specialty}) at ${o.location} — ${o.slot} [id:${o.provider_id}]${prepLine}`;
+      })
       .join("\n");
     const user = `Patient: ${data.patient_name}\nOffers secured:\n${offerLines}`;
 
