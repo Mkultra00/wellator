@@ -150,3 +150,86 @@ export const synthesizeVoice = createServerFn({ method: "POST" })
     const base64 = Buffer.from(buf).toString("base64");
     return { audio_base64: base64 };
   });
+
+const PATIENT_VOICE_POOL = [
+  "Xb7hH8MSUJpSbSDYk0k2", // Alice
+  "pFZP5JQG7iQjIQuC4Bku", // Lily
+  "FGY2WhTYpPnrIDTdsKH5", // Laura
+];
+
+export function pickPatientVoice(seed: string) {
+  let h = 0;
+  for (let i = 0; i < seed.length; i++) h = (h * 31 + seed.charCodeAt(i)) | 0;
+  return PATIENT_VOICE_POOL[Math.abs(h) % PATIENT_VOICE_POOL.length];
+}
+
+const ConfirmInput = z.object({
+  patient_name: z.string(),
+  offers: z
+    .array(
+      z.object({
+        provider_id: z.string(),
+        provider_name: z.string(),
+        specialty: z.string(),
+        location: z.string(),
+        slot: z.string(),
+      }),
+    )
+    .min(1),
+});
+
+export type ConfirmTurn = { speaker: "mara" | "patient"; text: string };
+export type ConfirmOutcome = {
+  accepted_provider_ids: string[];
+  declined_provider_ids: string[];
+  notes?: string;
+};
+
+export const generatePatientConfirmDialog = createServerFn({ method: "POST" })
+  .inputValidator((d) => ConfirmInput.parse(d))
+  .handler(async ({ data }) => {
+    const apiKey = process.env.LOVABLE_API_KEY;
+    if (!apiKey) throw new Error("LOVABLE_API_KEY not configured");
+
+    const system = `You generate a short realistic phone-call transcript where Mara (AI care navigator) calls the elderly patient to review the appointment slots she just secured and asks the patient to confirm. Output ONLY JSON: {"turns":[{"speaker":"mara"|"patient","text":"..."}], "outcome":{"accepted_provider_ids":["..."],"declined_provider_ids":["..."],"notes":"..."}}. 6-10 turns. Warm, slow, clear language for an older adult. Mara opens by greeting the patient by first name, says she called the offices, then lists each offer (provider, specialty, day/time). She asks the patient if the times work. Patient responds naturally — usually accepts most/all, sometimes asks to skip one. End with Mara confirming next steps and that a confirmation email is on the way.`;
+
+    const offerLines = data.offers
+      .map(
+        (o, i) =>
+          `${i + 1}. ${o.provider_name} (${o.specialty}) at ${o.location} — ${o.slot} [id:${o.provider_id}]`,
+      )
+      .join("\n");
+    const user = `Patient: ${data.patient_name}\nOffers secured:\n${offerLines}`;
+
+    const res = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "Lovable-API-Key": apiKey },
+      body: JSON.stringify({
+        model: "google/gemini-3.5-flash",
+        messages: [
+          { role: "system", content: system },
+          { role: "user", content: user },
+        ],
+        response_format: { type: "json_object" },
+      }),
+    });
+    if (!res.ok) {
+      const t = await res.text().catch(() => "");
+      throw new Error(`Gateway ${res.status}: ${t}`);
+    }
+    const json = await res.json();
+    const content = json?.choices?.[0]?.message?.content ?? "{}";
+    let parsed: { turns: ConfirmTurn[]; outcome: ConfirmOutcome };
+    try {
+      parsed = JSON.parse(content);
+    } catch {
+      throw new Error("Bad JSON from model");
+    }
+    return {
+      turns: Array.isArray(parsed.turns) ? parsed.turns : [],
+      outcome: parsed.outcome ?? { accepted_provider_ids: [], declined_provider_ids: [] },
+      mara_voice_id: MARA_VOICE,
+      patient_voice_id: pickPatientVoice(data.patient_name),
+    };
+  });
+
