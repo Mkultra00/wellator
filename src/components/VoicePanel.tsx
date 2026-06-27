@@ -387,7 +387,7 @@ function VoicePanelInner({ patient, scenario, context, onClose }: Props) {
                         <Loader2 className="h-3 w-3 animate-spin" /> Analyzing…
                       </span>
                     )}
-                    {a.status === "ready" && "Shared with Mara"}
+                    {a.status === "ready" && "Shared with Marie"}
                     {a.status === "error" && <span className="text-destructive">Failed</span>}
                   </div>
                 </div>
