@@ -31,12 +31,11 @@ const SCENARIO_LABEL: Record<Scenario, string> = {
 
 const SCENARIO_OPENER: Record<Scenario, string> = {
   new_booking:
-    "Hi, this is Mara, an AI care navigator calling on behalf of a patient. I'd like to book a new appointment with one of your providers. Do you have a moment?",
+    "Hi there, this is Mara, an AI care navigator calling on behalf of a patient. Thank you so much for taking my call. I'd love to book a new appointment with one of your providers when you have a moment, please.",
   billing_explainer:
-    "Hi, this is Mara. I can help with your bills, insurance, upcoming appointments, or procedures — and I can also explain how to use this app or answer questions about how it works. What would you like to start with?",
-
+    "Hi there, this is Mara. I'm so glad to help you with your bills, insurance, upcoming appointments, or procedures — and I can also walk you through how to use this app. What would you like to start with today?",
   reminder:
-    "Hi, this is Mara — a friendly reminder about your upcoming visit. Would you like to confirm, reschedule, or have me answer any questions about it?",
+    "Hi, this is Mara — just checking in with a friendly reminder about your upcoming visit. Would you like to confirm, reschedule, or have me answer any questions about it? I'm happy to help.",
 };
 
 type Props = {
