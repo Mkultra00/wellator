@@ -160,13 +160,21 @@ OPENING_LINE (Mara's first turn must use this verbatim, then optionally add one 
     } catch {
       throw new Error("Bad JSON from model");
     }
+    const turns = Array.isArray(parsed.turns) ? parsed.turns : [];
+    // Hard guarantee: Mara's first spoken turn uses the canonical opening line
+    // so insurance + referring PCP are always consistent with the patient profile.
+    const firstMaraIdx = turns.findIndex((t) => t?.speaker === "mara");
+    if (firstMaraIdx >= 0 && !data.recall_reason) {
+      turns[firstMaraIdx] = { speaker: "mara", text: openingLine };
+    }
     return {
-      turns: Array.isArray(parsed.turns) ? parsed.turns : [],
+      turns,
       outcome: parsed.outcome ?? { kind: "no_availability" },
       office_voice_id: pickOfficeVoice(data.provider_name),
       mara_voice_id: MARA_VOICE,
     };
   });
+
 
 export const synthesizeVoice = createServerFn({ method: "POST" })
   .inputValidator((d) =>
