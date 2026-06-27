@@ -82,8 +82,6 @@ function VoicePanelInner({ patient, scenario, context, onClose }: Props) {
         runToolForAgent("get_insurance_summary", { ...p, patient_id: patient.id }, patient.id),
       get_billing_summary: (p) =>
         runToolForAgent("get_billing_summary", { ...p, patient_id: patient.id }, patient.id),
-      record_pt_feedback: (p) =>
-        runToolForAgent("record_pt_feedback", { ...p, patient_id: patient.id }, patient.id),
       request_human_transfer: (p) => {
         toast.info("Marked for human follow-up", {
           description: typeof p.reason === "string" ? p.reason : undefined,
