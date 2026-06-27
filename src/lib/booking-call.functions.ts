@@ -113,14 +113,17 @@ When the office OFFERS a slot, BEFORE the call wraps Mara must ask: "Is there an
       : "Referred by: self-referral (no PCP on file)";
 
     const firstName = data.patient_name.split(" ")[0];
-    const openingLine = `Hi, this is Mara, an AI care navigator calling on behalf of ${data.patient_name}. ${
+    const patientFactLine = `${
       data.referring_doctor
         ? `${firstName} was referred by ${data.referring_doctor}`
         : `${firstName} is self-referred`
     }, and ${firstName}'s insurance is ${payer ?? "not on file"}${plan ? ` (${plan})` : ""}${memberId ? `, member ID ${memberId}` : ""}.${referralReq}`;
+    const openingLine = `Hi, this is Mara, an AI care navigator calling on behalf of ${data.patient_name}. ${patientFactLine}`;
+    const callbackOpeningLine = `Hi, this is Mara, an AI care navigator calling back on behalf of ${data.patient_name}. ${patientFactLine} The patient asked me to reschedule the previously offered appointment${data.previous_slot ? ` (${data.previous_slot})` : ""} because ${data.recall_reason ?? "the time did not work"}. Could we look for a different ${data.recall_reason && /(day|date|weekday)/i.test(data.recall_reason) ? "day" : "time"}?`;
+    const canonicalOpeningLine = data.recall_reason ? callbackOpeningLine : openingLine;
 
     const recallLine = data.recall_reason
-      ? `\n*** CALLBACK *** Previously offered: ${data.previous_slot ?? "an earlier slot"}. Patient asked to reschedule. Reason: ${data.recall_reason}. Mara must reference this and request a different ${/(day|date|weekday)/i.test(data.recall_reason) ? "day" : "time"} that still fits preferences.`
+      ? `\n*** CALLBACK *** Previously offered: ${data.previous_slot ?? "an earlier slot"}. Patient asked to reschedule. Reason: ${data.recall_reason}. Mara must use the CALLBACK_OPENING_LINE verbatim and request a different ${/(day|date|weekday)/i.test(data.recall_reason) ? "day" : "time"} that still fits preferences.`
       : "";
 
     const user = `Patient: ${data.patient_name}
@@ -130,7 +133,7 @@ Calling: ${data.provider_name}, ${data.provider_specialty} — ${data.provider_l
 ${prefLine}${recallLine}
 
 OPENING_LINE (Mara's first turn must use this verbatim, then optionally add one short sentence requesting the appointment):
-"${openingLine}"`;
+"${canonicalOpeningLine}"`;
 
 
     const res = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
@@ -164,8 +167,8 @@ OPENING_LINE (Mara's first turn must use this verbatim, then optionally add one 
     // Hard guarantee: Mara's first spoken turn uses the canonical opening line
     // so insurance + referring PCP are always consistent with the patient profile.
     const firstMaraIdx = turns.findIndex((t) => t?.speaker === "mara");
-    if (firstMaraIdx >= 0 && !data.recall_reason) {
-      turns[firstMaraIdx] = { speaker: "mara", text: openingLine };
+    if (firstMaraIdx >= 0) {
+      turns[firstMaraIdx] = { speaker: "mara", text: canonicalOpeningLine };
     }
     return {
       turns,
