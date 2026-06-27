@@ -31,7 +31,7 @@ import {
   type DialogTurn,
   type DialogOutcome,
 } from "@/lib/booking-call.functions";
-import { getBookingContext } from "@/lib/data.functions";
+import { getBookingContext, saveBookingCall } from "@/lib/data.functions";
 import type { PickedProvider } from "./ProviderPicker";
 import type { BookingPrefs } from "./BookingPreferences";
 import type { Patient } from "@/lib/patient-context";
@@ -90,6 +90,8 @@ export function BatchCallSimulator({ patient, providers, preferences, onReset, o
   const genConfirm = useServerFn(generatePatientConfirmDialog);
   const tts = useServerFn(synthesizeVoice);
   const fetchCtx = useServerFn(getBookingContext);
+  const persistCall = useServerFn(saveBookingCall);
+
 
 
   const startedRef = useRef(false);
@@ -189,7 +191,35 @@ export function BatchCallSimulator({ patient, providers, preferences, onReset, o
     setCalls((prev) =>
       prev.map((c, i) => (i === idx ? { ...c, status: "done", outcome: dialog.outcome } : c)),
     );
+
+    // Persist to call_logs so the inbox can show transcripts + status.
+    persistCall({
+      data: {
+        patient_id: patient.id,
+        scenario: "booking_call",
+        transcript: dialog.turns.map((t) => ({
+          speaker: t.speaker,
+          who: t.speaker === "mara" ? "Mara" : `${provider.name} office`,
+          text: t.text,
+        })),
+        outcome: JSON.stringify({
+          kind: dialog.outcome.kind,
+          slot: dialog.outcome.kind === "offered" ? (dialog.outcome as any).slot : null,
+          provider_id: provider.id,
+          provider_name: provider.name,
+          provider_specialty: provider.specialty,
+          provider_location: provider.location,
+          status:
+            dialog.outcome.kind === "offered"
+              ? "booked"
+              : dialog.outcome.kind === "voicemail"
+                ? "needs_more_info"
+                : "no_availability",
+        }),
+      },
+    }).catch(() => {});
   }
+
 
   const runAll = useCallback(async () => {
     setPhase("running");
@@ -278,7 +308,29 @@ export function BatchCallSimulator({ patient, providers, preferences, onReset, o
       });
       setPhase("confirmed");
       toast.success("Confirmation email sent to patient");
+
+      // Persist the patient confirmation call to call_logs.
+      persistCall({
+        data: {
+          patient_id: patient.id,
+          scenario: "patient_confirmation",
+          transcript: confirm.turns.map((t) => ({
+            speaker: t.speaker,
+            who: t.speaker === "mara" ? "Mara" : patient.full_name,
+            text: t.text,
+          })),
+          outcome: JSON.stringify({
+            kind: "patient_confirmed",
+            status: "confirmed",
+            accepted_provider_ids: confirm.outcome.accepted_provider_ids ?? [],
+            declined_provider_ids: confirm.outcome.declined_provider_ids ?? [],
+            offers: finalOffers,
+            email: { to: `${patient.full_name.toLowerCase().replace(/\s+/g, ".")}@example.com`, subject, body },
+          }),
+        },
+      }).catch(() => {});
     })();
+
     return () => {
       cancelled = true;
     };

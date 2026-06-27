@@ -215,6 +215,44 @@ export const finalizeCallLog = createServerFn({ method: "POST" })
     return { ok: true };
   });
 
+export const saveBookingCall = createServerFn({ method: "POST" })
+  .inputValidator((d) =>
+    z
+      .object({
+        patient_id: z.string().min(1),
+        scenario: z.string(),
+        transcript: z.array(z.any()),
+        outcome: z.string(),
+        started_at: z.string().optional(),
+        ended_at: z.string().optional(),
+      })
+      .parse(d),
+  )
+  .handler(async ({ data }) => {
+    const db = await admin();
+    const { error } = await db.from("call_logs").insert({
+      patient_id: data.patient_id,
+      scenario: data.scenario,
+      transcript: data.transcript,
+      outcome: data.outcome,
+      started_at: data.started_at ?? new Date().toISOString(),
+      ended_at: data.ended_at ?? new Date().toISOString(),
+    });
+    if (error) throw new Error(error.message);
+    return { ok: true };
+  });
+
+export const listCallLogs = createServerFn({ method: "GET" }).handler(async () => {
+  const db = await admin();
+  const { data, error } = await db
+    .from("call_logs")
+    .select("id,patient_id,scenario,started_at,ended_at,transcript,outcome,patients(full_name)")
+    .order("started_at", { ascending: false })
+    .limit(100);
+  if (error) throw new Error(error.message);
+  return data ?? [];
+});
+
 export const adminDashboardData = createServerFn({ method: "GET" }).handler(async () => {
   const db = await admin();
   const [appts, calls, feedback] = await Promise.all([
