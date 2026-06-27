@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import { AppShell } from "@/components/AppShell";
 import { listCallLogs } from "@/lib/data.functions";
+import { usePatient } from "@/lib/patient-context";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
