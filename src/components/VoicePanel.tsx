@@ -171,6 +171,14 @@ function VoicePanelInner({ patient, scenario, context, onClose }: Props) {
       await conversation.startSession({
         conversationToken: token,
         connectionType: "webrtc",
+        overrides: {
+          agent: {
+            prompt: {
+              prompt: `You are Mara, a warm, patient AI care navigator helping elderly patients with healthcare tasks. Speak with a gentle Filipino English accent and use friendly, respectful phrasing that sounds natural to Filipino English speakers. Keep sentences short, clear, and reassuring.`,
+            },
+            language: "en",
+          },
+        },
         dynamicVariables: {
           patient_id: patient.id,
           patient_name: patient.full_name,
