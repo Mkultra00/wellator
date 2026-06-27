@@ -19,6 +19,7 @@ export type ToolName =
   | "find_providers"
   | "check_availability"
   | "book_appointment"
+  | "get_appointments"
   | "get_insurance_summary"
   | "get_billing_summary"
   | "record_pt_feedback"
