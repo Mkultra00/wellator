@@ -453,7 +453,7 @@ OPENING_LINE (Mara's first turn must use this verbatim, then optionally add one 
       }
     }
     return {
-      turns,
+      turns: ensureMaraClosing(turns),
       outcome: parsed.outcome ?? { kind: "no_availability" },
       office_voice_id: pickOfficeVoice(data.provider_name),
       mara_voice_id: MARA_VOICE,
