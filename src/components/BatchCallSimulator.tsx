@@ -1,11 +1,12 @@
 /**
- * BatchCallSimulator — sequentially places REAL voice calls (via ElevenLabs)
- * for each picked provider. Mara dials each office one at a time. The person
- * answering at the office speaks into the mic (or another voice agent can
- * answer if one is wired up). After each call ends the user marks the
- * outcome and Mara advances to the next office.
+ * BatchCallSimulator — fully AI-driven mock batch calls.
+ * Mara (Gemini 3.5 Flash + ElevenLabs voice) calls each doctor's office.
+ * A second ElevenLabs voice plays the receptionist. Both sides are generated
+ * by the LLM as a short transcript per call, then spoken aloud turn-by-turn
+ * with live transcript reveal. No human voice needed.
  */
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useServerFn } from "@tanstack/react-start";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -18,27 +19,30 @@ import {
   ArrowRight,
   Trophy,
   Loader2,
+  Play,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { VoicePanel } from "./VoicePanel";
+import {
+  generateBookingDialog,
+  synthesizeVoice,
+  type DialogTurn,
+  type DialogOutcome,
+} from "@/lib/booking-call.functions";
 import type { PickedProvider } from "./ProviderPicker";
 import type { BookingPrefs } from "./BookingPreferences";
 import type { Patient } from "@/lib/patient-context";
-
-type Outcome =
-  | { kind: "booked"; slot: string }
-  | { kind: "offered"; slot: string }
-  | { kind: "voicemail" }
-  | { kind: "no_availability" };
+import { toast } from "sonner";
 
 type CallState = {
   provider: PickedProvider;
   status: "queued" | "live" | "done";
-  outcome?: Outcome;
+  turns: DialogTurn[];
+  revealed: number; // how many turns shown so far
+  outcome?: DialogOutcome;
 };
 
-function scoreOutcome(o: Outcome | undefined, prefs: BookingPrefs, provider: PickedProvider) {
-  if (!o || (o.kind !== "offered" && o.kind !== "booked")) return -1;
+function scoreOutcome(o: DialogOutcome | undefined, prefs: BookingPrefs, provider: PickedProvider) {
+  if (!o || o.kind !== "offered") return -1;
   let score = 100;
   if (provider.distance_miles != null) {
     score -= Math.max(0, provider.distance_miles - 1) * 3;
@@ -56,22 +60,19 @@ type Props = {
   onClose: () => void;
 };
 
-export function BatchCallSimulator({
-  patient,
-  providers,
-  preferences,
-  onReset,
-  onClose,
-}: Props) {
+export function BatchCallSimulator({ patient, providers, preferences, onReset, onClose }: Props) {
   const [calls, setCalls] = useState<CallState[]>(() =>
-    providers.map((p) => ({ provider: p, status: "queued" })),
+    providers.map((p) => ({ provider: p, status: "queued", turns: [], revealed: 0 })),
   );
-  const [activeIdx, setActiveIdx] = useState<number>(0);
-  const [phase, setPhase] = useState<"ready" | "live" | "result" | "finished">("ready");
+  const [activeIdx, setActiveIdx] = useState(0);
+  const [phase, setPhase] = useState<"idle" | "running" | "finished">("idle");
   const [confirmedIdx, setConfirmedIdx] = useState<number | null>(null);
-  const [slotDraft, setSlotDraft] = useState("");
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const cancelRef = useRef(false);
 
-  const current = providers[activeIdx];
+  const genDialog = useServerFn(generateBookingDialog);
+  const tts = useServerFn(synthesizeVoice);
+
   const allDone = phase === "finished";
 
   const best = useMemo(() => {
@@ -88,43 +89,91 @@ export function BatchCallSimulator({
     return bestI >= 0 && bestS > 0 ? bestI : null;
   }, [allDone, calls, preferences]);
 
-  function startCall() {
-    setCalls((prev) =>
-      prev.map((c, i) => (i === activeIdx ? { ...c, status: "live" } : c)),
-    );
-    setPhase("live");
+  useEffect(() => {
+    return () => {
+      cancelRef.current = true;
+      audioRef.current?.pause();
+    };
+  }, []);
+
+  function playAudio(base64: string): Promise<void> {
+    return new Promise((resolve) => {
+      const audio = new Audio(`data:audio/mpeg;base64,${base64}`);
+      audioRef.current = audio;
+      audio.onended = () => resolve();
+      audio.onerror = () => resolve();
+      audio.play().catch(() => resolve());
+    });
   }
 
-  function endCall() {
-    setPhase("result");
-    setSlotDraft("");
-  }
-
-  function recordOutcome(outcome: Outcome) {
+  async function runOne(idx: number) {
+    const provider = providers[idx];
     setCalls((prev) =>
-      prev.map((c, i) =>
-        i === activeIdx ? { ...c, status: "done", outcome } : c,
-      ),
+      prev.map((c, i) => (i === idx ? { ...c, status: "live", turns: [], revealed: 0 } : c)),
     );
-    const nextIdx = activeIdx + 1;
-    if (nextIdx >= providers.length) {
-      setPhase("finished");
-    } else {
-      setActiveIdx(nextIdx);
-      setPhase("ready");
+    let dialog;
+    try {
+      dialog = await genDialog({
+        data: {
+          patient_name: patient.full_name,
+          provider_name: provider.name,
+          provider_specialty: provider.specialty,
+          provider_location: provider.location,
+          preferences: {
+            preferred_locations: preferences.preferred_locations,
+            days: preferences.days,
+            time_of_day: preferences.time_of_day,
+            max_distance_miles: preferences.max_distance_miles,
+            notes: preferences.notes,
+          },
+        },
+      });
+    } catch (e) {
+      toast.error(`Call to ${provider.name} failed`, {
+        description: e instanceof Error ? e.message : "Dialog generation failed",
+      });
+      setCalls((prev) =>
+        prev.map((c, i) =>
+          i === idx ? { ...c, status: "done", outcome: { kind: "no_availability" } } : c,
+        ),
+      );
+      return;
     }
+    setCalls((prev) => prev.map((c, i) => (i === idx ? { ...c, turns: dialog.turns } : c)));
+
+    for (let t = 0; t < dialog.turns.length; t++) {
+      if (cancelRef.current) return;
+      const turn = dialog.turns[t];
+      const voiceId = turn.speaker === "mara" ? dialog.mara_voice_id : dialog.office_voice_id;
+      let audio: { audio_base64: string } | null = null;
+      try {
+        audio = await tts({ data: { text: turn.text, voice_id: voiceId } });
+      } catch {
+        // skip audio, still reveal text
+      }
+      setCalls((prev) => prev.map((c, i) => (i === idx ? { ...c, revealed: t + 1 } : c)));
+      if (audio) await playAudio(audio.audio_base64);
+      else await new Promise((r) => setTimeout(r, 600));
+    }
+
+    setCalls((prev) =>
+      prev.map((c, i) => (i === idx ? { ...c, status: "done", outcome: dialog.outcome } : c)),
+    );
+  }
+
+  async function runAll() {
+    setPhase("running");
+    cancelRef.current = false;
+    for (let i = 0; i < providers.length; i++) {
+      if (cancelRef.current) return;
+      setActiveIdx(i);
+      await runOne(i);
+    }
+    setPhase("finished");
   }
 
   function confirmBooking(i: number) {
     setConfirmedIdx(i);
-    setCalls((prev) =>
-      prev.map((c, idx) => {
-        if (idx !== i || !c.outcome) return c;
-        if (c.outcome.kind === "offered")
-          return { ...c, outcome: { kind: "booked", slot: c.outcome.slot } };
-        return c;
-      }),
-    );
   }
 
   return (
@@ -132,7 +181,7 @@ export function BatchCallSimulator({
       <div className="flex items-center justify-between border-b border-border bg-primary/5 p-4">
         <div>
           <div className="text-xs uppercase tracking-wider text-muted-foreground">
-            Live batch calls
+            AI batch calls — Gemini 3.5 Flash · two ElevenLabs voices
           </div>
           <div className="text-lg font-semibold">
             Mara is calling {providers.length}{" "}
@@ -153,127 +202,41 @@ export function BatchCallSimulator({
         </div>
       </div>
 
+      {phase === "idle" && (
+        <div className="flex items-center gap-3 border-b border-border bg-background p-4">
+          <Button onClick={runAll} className="gap-2">
+            <Play className="h-4 w-4" /> Start batch calls
+          </Button>
+          <span className="text-xs text-muted-foreground">
+            Mara and the office receptionists are both AI voices — sit back and listen.
+          </span>
+        </div>
+      )}
+
       <div className="divide-y divide-border">
         {calls.map((c, i) => (
           <CallRow
             key={c.provider.id}
             call={c}
-            isActive={i === activeIdx && !allDone}
+            patientName={patient.full_name}
+            isActive={i === activeIdx && phase === "running"}
             isBest={best === i}
             isConfirmed={confirmedIdx === i}
-            canConfirm={
-              allDone &&
-              (c.outcome?.kind === "offered" || c.outcome?.kind === "booked") &&
-              confirmedIdx === null
-            }
+            canConfirm={allDone && c.outcome?.kind === "offered" && confirmedIdx === null}
             onConfirm={() => confirmBooking(i)}
           />
         ))}
       </div>
-
-      {!allDone && current && (
-        <div className="border-t border-border bg-background p-4">
-          <div className="mb-3 flex items-center gap-2 text-sm">
-            <Phone className="h-4 w-4 text-primary" />
-            <span className="font-medium">
-              Call {activeIdx + 1} of {providers.length}:
-            </span>
-            <span>{current.name}</span>
-            <Badge variant="secondary" className="text-xs">
-              {current.specialty}
-            </Badge>
-            <span className="text-xs text-muted-foreground">· {current.location}</span>
-          </div>
-
-          {phase === "ready" && (
-            <div className="flex flex-wrap items-center gap-3">
-              <Button onClick={startCall} className="gap-2">
-                <Phone className="h-4 w-4" /> Dial {current.name}'s office
-              </Button>
-              <span className="text-xs text-muted-foreground">
-                You (or another voice agent) can play the receptionist on the other end.
-              </span>
-            </div>
-          )}
-
-          {phase === "live" && (
-            <div className="space-y-3">
-              <VoicePanel
-                key={`batch-${current.id}`}
-                patient={patient}
-                scenario="new_booking"
-                context={{
-                  providers: [
-                    {
-                      name: current.name,
-                      specialty: current.specialty,
-                      location: current.location,
-                    },
-                  ],
-                  preferences,
-                  batch_position: `${activeIdx + 1} of ${providers.length}`,
-                }}
-                onClose={endCall}
-              />
-              <div className="flex justify-end">
-                <Button variant="outline" size="sm" onClick={endCall}>
-                  Mark call ended → record outcome
-                </Button>
-              </div>
-            </div>
-          )}
-
-          {phase === "result" && (
-            <div className="space-y-3 rounded-md border border-border bg-muted/30 p-3">
-              <div className="text-sm font-medium">What happened on the call?</div>
-              <div className="flex flex-wrap gap-2">
-                <input
-                  type="text"
-                  placeholder="e.g. Thu 3:15 PM"
-                  value={slotDraft}
-                  onChange={(e) => setSlotDraft(e.target.value)}
-                  className="rounded-md border border-input bg-background px-3 py-1.5 text-sm"
-                />
-                <Button
-                  size="sm"
-                  disabled={!slotDraft.trim()}
-                  onClick={() => recordOutcome({ kind: "offered", slot: slotDraft.trim() })}
-                  className="gap-1"
-                >
-                  <CheckCircle2 className="h-4 w-4" /> Slot offered
-                </Button>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => recordOutcome({ kind: "no_availability" })}
-                  className="gap-1"
-                >
-                  <XCircle className="h-4 w-4" /> No availability
-                </Button>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => recordOutcome({ kind: "voicemail" })}
-                  className="gap-1"
-                >
-                  <Voicemail className="h-4 w-4" /> Voicemail
-                </Button>
-              </div>
-              <div className="text-xs text-muted-foreground">
-                Mara will move to the next office after you record this outcome.
-              </div>
-            </div>
-          )}
-        </div>
-      )}
 
       {allDone && (
         <div className="border-t border-border bg-muted/40 p-4 text-sm">
           {confirmedIdx !== null ? (
             <div className="flex items-center gap-2 text-emerald-700 dark:text-emerald-400">
               <CheckCircle2 className="h-4 w-4" />
-              Booked with {calls[confirmedIdx].provider.name} —{" "}
-              {(calls[confirmedIdx].outcome as { slot: string }).slot}.
+              Booked with {calls[confirmedIdx].provider.name}
+              {calls[confirmedIdx].outcome?.kind === "offered" &&
+                ` — ${(calls[confirmedIdx].outcome as { slot: string }).slot}`}
+              .
             </div>
           ) : best !== null ? (
             <div>
@@ -294,6 +257,7 @@ export function BatchCallSimulator({
 
 function CallRow({
   call,
+  patientName,
   isActive,
   isBest,
   isConfirmed,
@@ -301,13 +265,15 @@ function CallRow({
   onConfirm,
 }: {
   call: CallState;
+  patientName: string;
   isActive: boolean;
   isBest: boolean;
   isConfirmed: boolean;
   canConfirm: boolean;
   onConfirm: () => void;
 }) {
-  const { provider, status, outcome } = call;
+  const { provider, status, outcome, turns, revealed } = call;
+  const visibleTurns = turns.slice(0, revealed);
   return (
     <div
       className={cn(
@@ -326,9 +292,7 @@ function CallRow({
               {provider.specialty}
             </Badge>
             {provider.distance_miles != null && (
-              <span className="text-xs text-muted-foreground">
-                · {provider.distance_miles} mi
-              </span>
+              <span className="text-xs text-muted-foreground">· {provider.distance_miles} mi</span>
             )}
           </div>
           <div className="mt-0.5 text-xs text-muted-foreground">{provider.location}</div>
@@ -342,6 +306,27 @@ function CallRow({
           )}
         </div>
       </div>
+
+      {visibleTurns.length > 0 && (
+        <div className="mt-3 space-y-2 rounded-md border border-border bg-background p-3">
+          {visibleTurns.map((t, idx) => (
+            <div
+              key={idx}
+              className={cn(
+                "rounded px-2 py-1.5 text-sm",
+                t.speaker === "mara"
+                  ? "bg-primary/10"
+                  : "bg-muted",
+              )}
+            >
+              <div className="mb-0.5 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+                {t.speaker === "mara" ? `Mara (for ${patientName})` : `${provider.name}'s office`}
+              </div>
+              {t.text}
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -352,16 +337,13 @@ function StatusIcon({
   isActive,
 }: {
   status: CallState["status"];
-  outcome?: Outcome;
+  outcome?: DialogOutcome;
   isActive: boolean;
 }) {
-  if (status === "live" || isActive) {
-    return <Loader2 className="h-4 w-4 animate-spin text-primary" />;
-  }
+  if (status === "live" || isActive) return <Loader2 className="h-4 w-4 animate-spin text-primary" />;
   if (status === "queued") return <Phone className="h-4 w-4 text-muted-foreground" />;
   if (outcome?.kind === "voicemail") return <Voicemail className="h-4 w-4 text-amber-600" />;
-  if (outcome?.kind === "no_availability")
-    return <XCircle className="h-4 w-4 text-destructive" />;
+  if (outcome?.kind === "no_availability") return <XCircle className="h-4 w-4 text-destructive" />;
   return <CheckCircle2 className="h-4 w-4 text-emerald-600" />;
 }
 
@@ -371,13 +353,13 @@ function OutcomeBadge({
   isActive,
 }: {
   status: CallState["status"];
-  outcome?: Outcome;
+  outcome?: DialogOutcome;
   isActive: boolean;
 }) {
   if (isActive)
     return (
       <Badge variant="outline" className="text-xs">
-        <ArrowRight className="mr-1 h-3 w-3" /> Up now
+        <ArrowRight className="mr-1 h-3 w-3" /> On the line
       </Badge>
     );
   if (status === "queued")
@@ -397,12 +379,6 @@ function OutcomeBadge({
     return (
       <Badge variant="outline" className="border-destructive text-xs text-destructive">
         No availability
-      </Badge>
-    );
-  if (outcome.kind === "booked")
-    return (
-      <Badge className="bg-emerald-600 text-xs text-white hover:bg-emerald-600">
-        Booked · {outcome.slot}
       </Badge>
     );
   return (
