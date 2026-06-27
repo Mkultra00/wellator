@@ -68,16 +68,28 @@ export function AppShell({ children }: { children: ReactNode }) {
                 Demo patient
               </span>
               <Select value={patient?.id ?? ""} onValueChange={setPatientId}>
-                <SelectTrigger className="w-[260px]">
+                <SelectTrigger className="w-[300px]">
                   <SelectValue placeholder="Select patient" />
                 </SelectTrigger>
                 <SelectContent>
                   {patients.map((p) => (
                     <SelectItem key={p.id} value={p.id}>
-                      <div className="flex flex-col">
-                        <span>{p.full_name}</span>
+                      <div className="flex flex-col py-1">
+                        <span className="font-medium">{p.full_name}</span>
                         {p.address && (
-                          <span className="text-xs text-muted-foreground">{p.address}</span>
+                          <span className="text-xs text-muted-foreground">📍 {p.address}</span>
+                        )}
+                        {p.primary_provider && (
+                          <span className="text-xs text-muted-foreground">
+                            🩺 PCP: {p.primary_provider.name} · {p.primary_provider.specialty}
+                          </span>
+                        )}
+                        {p.insurance && (
+                          <span className="text-xs text-muted-foreground">
+                            🛡️ {p.insurance.payer}
+                            {p.insurance.plan ? ` · ${p.insurance.plan}` : ""}
+                            {p.insurance.member_id ? ` · #${p.insurance.member_id}` : ""}
+                          </span>
                         )}
                       </div>
                     </SelectItem>
@@ -85,8 +97,23 @@ export function AppShell({ children }: { children: ReactNode }) {
                 </SelectContent>
               </Select>
             </div>
-            {patient?.address && (
-              <span className="text-xs text-muted-foreground">📍 {patient.address}</span>
+            {patient && (
+              <div className="flex flex-col items-end gap-0.5 text-xs text-muted-foreground">
+                {patient.address && <span>📍 {patient.address}</span>}
+                {patient.primary_provider && (
+                  <span>
+                    🩺 PCP: {patient.primary_provider.name} · {patient.primary_provider.specialty}
+                  </span>
+                )}
+                {patient.insurance && (
+                  <span>
+                    🛡️ {patient.insurance.payer}
+                    {patient.insurance.plan ? ` · ${patient.insurance.plan}` : ""}
+                    {patient.insurance.member_id ? ` · Member #${patient.insurance.member_id}` : ""}
+                    {patient.insurance.referral_required ? " · referral required" : ""}
+                  </span>
+                )}
+              </div>
             )}
           </div>
         </div>

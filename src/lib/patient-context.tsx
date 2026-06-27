@@ -16,7 +16,18 @@ export type Patient = {
   latitude: number | null;
   longitude: number | null;
   needed_specialties: string[];
-
+  primary_provider: {
+    name: string;
+    specialty: string;
+    clinic_address: string | null;
+  } | null;
+  insurance: {
+    payer: string;
+    plan: string | null;
+    member_id: string | null;
+    group_id: string | null;
+    referral_required: boolean | null;
+  } | null;
 };
 
 

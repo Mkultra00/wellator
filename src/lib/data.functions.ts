@@ -38,11 +38,16 @@ export const listPatients = createServerFn({ method: "GET" }).handler(async () =
   const { data, error } = await db
     .from("patients")
     .select(
-      "id,full_name,dob,preferred_language,accessibility_notes,persona_note,primary_provider_id,address,latitude,longitude,needed_specialties",
+      "id,full_name,dob,preferred_language,accessibility_notes,persona_note,primary_provider_id,address,latitude,longitude,needed_specialties,primary_provider:providers!patients_primary_provider_id_fkey(name,specialty,clinic_address),insurance_profiles(payer,plan,member_id,group_id,referral_required)",
     )
     .order("full_name");
   if (error) throw new Error(error.message);
-  return data ?? [];
+  return (data ?? []).map((p: any) => ({
+    ...p,
+    insurance: Array.isArray(p.insurance_profiles)
+      ? p.insurance_profiles[0] ?? null
+      : p.insurance_profiles ?? null,
+  }));
 });
 
 
