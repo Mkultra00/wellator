@@ -4,7 +4,7 @@
  * needing webhook URLs configured in the ElevenLabs dashboard.
  * Persists transcript to call_logs for the admin dashboard.
  */
-import { useConversation } from "@elevenlabs/react";
+import { useConversation, ConversationProvider } from "@elevenlabs/react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import { getElevenLabsConversationToken, analyzeAttachment } from "@/lib/elevenlabs.functions";
