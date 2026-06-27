@@ -107,6 +107,7 @@ export function BatchCallSimulator({ patient, providers, preferences, onReset, o
 
   const [network, setNetwork] = useState<{ specialists: PickedProvider[] } | null>(null);
   const patientConfirmedRef = useRef(false);
+  const startedRef = useRef(false);
 
   useEffect(() => {
     const pp = patient.primary_provider;
