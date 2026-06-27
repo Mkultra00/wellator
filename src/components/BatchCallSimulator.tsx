@@ -308,7 +308,29 @@ export function BatchCallSimulator({ patient, providers, preferences, onReset, o
       });
       setPhase("confirmed");
       toast.success("Confirmation email sent to patient");
+
+      // Persist the patient confirmation call to call_logs.
+      persistCall({
+        data: {
+          patient_id: patient.id,
+          scenario: "patient_confirmation",
+          transcript: confirm.turns.map((t) => ({
+            speaker: t.speaker,
+            who: t.speaker === "mara" ? "Mara" : patient.full_name,
+            text: t.text,
+          })),
+          outcome: JSON.stringify({
+            kind: "patient_confirmed",
+            status: "confirmed",
+            accepted_provider_ids: confirm.outcome.accepted_provider_ids ?? [],
+            declined_provider_ids: confirm.outcome.declined_provider_ids ?? [],
+            offers: finalOffers,
+            email: { to: `${patient.full_name.toLowerCase().replace(/\s+/g, ".")}@example.com`, subject, body },
+          }),
+        },
+      }).catch(() => {});
     })();
+
     return () => {
       cancelled = true;
     };
