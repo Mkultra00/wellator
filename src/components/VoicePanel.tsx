@@ -52,7 +52,14 @@ export function VoicePanel({ patient, scenario, context, onClose }: Props) {
   const [connecting, setConnecting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [transcript, setTranscript] = useState<Turn[]>([]);
+  const [attachments, setAttachments] = useState<
+    Array<{ id: string; filename: string; mime: string; previewUrl?: string; status: "analyzing" | "ready" | "error"; summary?: string }>
+  >([]);
   const callLogIdRef = useRef<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const cameraInputRef = useRef<HTMLInputElement | null>(null);
+  const agentVariant: "mara" | "marie" = scenario === "billing_explainer" ? "marie" : "mara";
+
 
   const conversation = useConversation({
     clientTools: {
