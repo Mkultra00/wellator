@@ -1004,6 +1004,13 @@ export function BatchCallSimulator({ patient, providers, preferences, onReset, o
         />
       )}
 
+      {phase === "confirmed" && (
+        <ConfirmedSchedule
+          patientName={patient.full_name}
+          calls={calls}
+        />
+      )}
+
       {allDone && (
         <FinalReport
           calls={calls}
