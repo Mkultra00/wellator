@@ -4,7 +4,7 @@ import { z } from "zod";
 /**
  * Mint a WebRTC conversation token for the requested ElevenLabs Agent variant.
  * - "mara" (default): generic Mara agent (booking/PT/billing fallback)
- * - "marie": billing/insurance Q&A agent
+ * - "marie" (UI name: Mara): billing/insurance Q&A agent
  */
 export const getElevenLabsConversationToken = createServerFn({ method: "POST" })
   .inputValidator((d) =>
@@ -36,7 +36,7 @@ export const getElevenLabsConversationToken = createServerFn({ method: "POST" })
   });
 
 /**
- * Vision/document analysis for an attachment shared during a Marie/Mara chat.
+ * Vision/document analysis for an attachment shared during a Mara chat.
  * Uses Lovable AI Gateway (Gemini) to extract the key info from a bill,
  * insurance card, EOB, or appointment letter, so the live voice agent can
  * discuss it after we push the summary in via sendContextualUpdate.
@@ -62,7 +62,7 @@ export const analyzeAttachment = createServerFn({ method: "POST" })
     const content: Array<Record<string, unknown>> = [
       {
         type: "text",
-        text: `You are helping a voice agent (Mara/Marie) discuss a medical billing or insurance document with an elderly patient.
+        text: `You are helping a voice agent named Mara discuss a medical billing or insurance document with an elderly patient.
 
 The patient just attached: ${data.filename ?? "an attachment"} (${data.mime}).
 ${data.user_note ? `They added this note: "${data.user_note}"` : ""}
