@@ -96,11 +96,19 @@ export function ProviderPicker({ selectedIds, onChange, onConfirm }: Props) {
   function ProviderTile({ p }: { p: PickedProvider }) {
     const active = selectedSet.has(p.id);
     return (
-      <button
-        type="button"
+      <div
+        role="button"
+        tabIndex={0}
+        aria-pressed={active}
         onClick={() => toggle(p.id)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            toggle(p.id);
+          }
+        }}
         className={cn(
-          "flex gap-3 rounded-lg border-2 p-4 text-left transition-all hover:border-primary",
+          "flex cursor-pointer gap-3 rounded-lg border-2 p-4 text-left transition-all hover:border-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
           active ? "border-primary bg-primary/5" : "border-border",
         )}
       >
@@ -128,7 +136,7 @@ export function ProviderPicker({ selectedIds, onChange, onConfirm }: Props) {
             </div>
           )}
         </div>
-      </button>
+      </div>
     );
   }
 
