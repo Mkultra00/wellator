@@ -4,7 +4,7 @@ import { z } from "zod";
 /**
  * Mint a WebRTC conversation token for the requested ElevenLabs Agent variant.
  * - "mara" (default): generic Mara agent (booking/PT/billing fallback)
- * - "marie": billing/insurance Q&A agent
+ * - "marie" (UI name: Mara): billing/insurance Q&A agent
  */
 export const getElevenLabsConversationToken = createServerFn({ method: "POST" })
   .inputValidator((d) =>
