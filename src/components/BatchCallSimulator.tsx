@@ -340,6 +340,7 @@ export function BatchCallSimulator({ patient, providers, preferences, onReset, o
       const audio = await ttsWithTimeout(turn.text, voiceId);
       if (audio) await playAudio(audio.audio_base64);
       else await speakWithBrowser(turn.text, turn.speaker);
+      if (t < dialog.turns.length - 1) await new Promise((r) => setTimeout(r, TURN_GAP_MS));
     }
     setCalls((prev) =>
       prev.map((c, i) => (i === idx ? { ...c, status: "done", outcome: dialog.outcome } : c)),
