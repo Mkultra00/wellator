@@ -195,6 +195,29 @@ function nextSlot(
   }
   return `${rotatedDays[0]}, July ${7 + offset} at ${baseTime}`;
 }
+function ensureMaraClosing<T extends { speaker: string; text: string }>(turns: T[]): T[] {
+  if (turns.length === 0) return turns;
+  const last = turns[turns.length - 1];
+  const hasThanks = /thank/i.test(last.text);
+  const hasGoodbye = /goodbye|bye|take care|have a wonderful/i.test(last.text);
+  if (last.speaker === "mara" && hasThanks && hasGoodbye) return turns;
+  if (last.speaker === "mara") {
+    const closing = hasGoodbye
+      ? " Thank you so much again."
+      : hasThanks
+        ? " Goodbye, and take care!"
+        : " Thank you so much. Goodbye, and take care!";
+    return [
+      ...turns.slice(0, -1),
+      { ...last, text: last.text.trim() + closing } as T,
+    ];
+  }
+  return [
+    ...turns,
+    { speaker: "mara", text: "Thank you so much for your time today. Goodbye, and take care!" } as T,
+  ];
+}
+
 
 function prepForSpecialty(specialty: string): PrepItem[] {
   const s = specialty.toLowerCase();
@@ -245,7 +268,7 @@ function deterministicAvailabilityDialog(args: {
         { speaker: "mara" as const, text: `The referral is from ${args.referringDoctor ?? "the primary care doctor on file"}, and the patient has ${insuranceLine}.` },
         { speaker: "office" as const, text: "I checked the calendar live, and I'm sorry — we do not have availability in that requested window." },
         { speaker: "office" as const, text: "The next open appointment is about three weeks out, so I would recommend trying another specialist on the list." },
-        { speaker: "mara" as const, text: "I understand, and I really appreciate your time. Thank you, and have a wonderful day." },
+        { speaker: "mara" as const, text: "I understand, and I really appreciate your time. Thank you so much, and have a wonderful day. Goodbye!" },
       ],
       outcome: { kind: "no_availability" as const },
     };
@@ -261,7 +284,7 @@ function deterministicAvailabilityDialog(args: {
       { speaker: "office" as const, text: `Done — ${args.data.patient_name} is booked with ${args.data.provider_name} on ${slot}.` },
       { speaker: "mara" as const, text: "Wonderful, thank you so much. Could you please tell me if there's anything the patient should bring or have done before the visit — referral, recent records, bloodwork, imaging, or EKG?" },
       { speaker: "office" as const, text: prep.map((p) => p.text).join(". ") + "." },
-      { speaker: "mara" as const, text: "Thank you kindly for all your help today. We really appreciate it." },
+      { speaker: "mara" as const, text: "Thank you kindly for all your help today. We really appreciate it. Goodbye, and take care!" },
     ],
     outcome: { kind: "offered" as const, slot, prep },
   };
@@ -311,7 +334,7 @@ export const generateBookingDialog = createServerFn({ method: "POST" })
     }`;
 
 
-    const system = `You generate realistic short phone-call transcripts between Mara (a warm, kind AI care navigator calling on behalf of a patient) and a scheduler at a doctor's office. Mara should always sound friendly, patient, and polite. Use "please" and "thank you" naturally, especially when asking for help, confirming a slot, or closing the call. Greet the scheduler warmly and say a friendly thank-you before hanging up. The person who answers IS the office scheduler — they have the live appointment calendar open in front of them and full authority to confirm, hold, and book slots themselves on this call. They MUST complete the scheduling check live. They must NEVER say things like "let me check with the scheduler", "I'll have to check with scheduling", "I'll need to call you back", "let me transfer you", "I'll have someone get back to you", "please leave a voicemail", or otherwise defer the availability check to another person, later call, voicemail, or callback. They must OFFER CONCRETE EXACT APPOINTMENT TIMES including the day and clock time with hour and minute (for example: "I have Tuesday the 14th at 10:15am or Thursday the 16th at 2:30pm — which works?"). They must NEVER give only vague windows like "morning", "afternoon", "evening", "first thing", or "later in the day". They must BOOK the chosen exact slot on the call ("Great, I've got you down for Thursday at 2:30 with Dr. X."). Mara must NOT mention travel distance, miles, or how far the office is from the patient. Outcomes on the call are exactly one of: a concrete offered+booked slot, or a live "no availability in that window" answer with a concrete next open date. Output ONLY valid JSON matching: {"turns":[{"speaker":"mara"|"office","text":"..."}], "outcome": {"kind":"offered","slot":"...","prep":[{"text":"...","category":"bring"|"pcp_send"|"lab"|"imaging"|"cardiac"|"in_office"|"other","bookable":true|false}]} | {"kind":"no_availability"}}. 6-12 turns. Natural, concise spoken lines (1-2 sentences each).
+    const system = `You generate realistic short phone-call transcripts between Mara (a warm, kind AI care navigator calling on behalf of a patient) and a scheduler at a doctor's office. Mara should always sound friendly, patient, and polite. Use "please" and "thank you" naturally, especially when asking for help, confirming a slot, or closing the call. Mara MUST end the call with a warm thank you AND a clear goodbye in her final spoken turn, for example: "Thank you so much for your help today. Have a wonderful day, and goodbye!" The person who answers IS the office scheduler — they have the live appointment calendar open in front of them and full authority to confirm, hold, and book slots themselves on this call. They MUST complete the scheduling check live. They must NEVER say things like "let me check with the scheduler", "I'll have to check with scheduling", "I'll need to call you back", "let me transfer you", "I'll have someone get back to you", "please leave a voicemail", or otherwise defer the availability check to another person, later call, voicemail, or callback. They must OFFER CONCRETE EXACT APPOINTMENT TIMES including the day and clock time with hour and minute (for example: "I have Tuesday the 14th at 10:15am or Thursday the 16th at 2:30pm — which works?"). They must NEVER give only vague windows like "morning", "afternoon", "evening", "first thing", or "later in the day". They must BOOK the chosen exact slot on the call ("Great, I've got you down for Thursday at 2:30 with Dr. X."). Mara must NOT mention travel distance, miles, or how far the office is from the patient. Outcomes on the call are exactly one of: a concrete offered+booked slot, or a live "no availability in that window" answer with a concrete next open date. Output ONLY valid JSON matching: {"turns":[{"speaker":"mara"|"office","text":"..."}], "outcome": {"kind":"offered","slot":"...","prep":[{"text":"...","category":"bring"|"pcp_send"|"lab"|"imaging"|"cardiac"|"in_office"|"other","bookable":true|false}]} | {"kind":"no_availability"}}. 6-12 turns. Natural, concise spoken lines (1-2 sentences each).
 
 CRITICAL FACT-USE RULES — do NOT invent or alter patient facts:
 - Use the patient name, referring primary care doctor, insurance payer, and plan EXACTLY as given in the user message. Copy them verbatim — never substitute other doctor names, payers (Aetna/BCBS/UHC/Medicare/etc.), or plan names.
@@ -431,7 +454,7 @@ OPENING_LINE (Mara's first turn must use this verbatim, then optionally add one 
       }
     }
     return {
-      turns,
+      turns: ensureMaraClosing(turns),
       outcome: parsed.outcome ?? { kind: "no_availability" },
       office_voice_id: pickOfficeVoice(data.provider_name),
       mara_voice_id: MARA_VOICE,
@@ -545,7 +568,7 @@ export const generatePatientConfirmDialog = createServerFn({ method: "POST" })
     const apiKey = process.env.LOVABLE_API_KEY;
     if (!apiKey) throw new Error("LOVABLE_API_KEY not configured");
 
-    const system = `You generate a short realistic phone-call transcript where Mara (a warm, kind AI care navigator) calls the elderly patient to read out the appointment slots she just secured, walk through prep, and get an explicit decision on each one. Mara should be friendly, patient, and polite. Use "please" and "thank you" naturally — for example, "Thank you for your time," "Could you please let me know if this works?" and "I really appreciate it." Greet the patient by first name, show warmth and care, and close with gratitude. Output ONLY JSON: {"turns":[{"speaker":"mara"|"patient","text":"..."}], "outcome":{"accepted_provider_ids":["..."],"declined_provider_ids":["..."],"callback_requests":[{"provider_id":"...","reason":"...","change":"day"|"time"|"other"}],"notes":"..."}}. 10-20 turns. Warm, slow, clear language for an older adult. Mara opens by greeting the patient by first name and says she got through to the offices and wants to read out each appointment to confirm. For EACH offer Mara MUST: (1) clearly VOICE the doctor name, specialty, clinic location, and the exact day and time of the appointment; (2) read the prep checklist — what to bring (ID, insurance card, medication list), what to ask the primary care doctor to send (referral, recent notes/records), and any tests required beforehand (bloodwork, X-ray, EKG), saying for each whether the specialist's office does it in-house or whether Mara will book it separately at a lab/imaging center ("I'll add the bloodwork to your booking list"); (3) explicitly ask the patient to choose ONE of THREE options for this appointment, in these words or close to them: "Does this time work for you, would you like me to call back and ask for a different day or time, or should I cancel this doctor and try the next one on your list?" The patient picks exactly one of those three for each offer: (a) ACCEPT → accepted_provider_ids; (b) CALLBACK → Mara then asks the follow-up "Is it the day or the time that doesn't work — and what would work better?" patient gives day/time preference → callback_requests entry with change="day"|"time" and a short reason like "prefers mornings" or "not Tuesday, try later in the week"; (c) CANCEL/TRY NEXT → declined_provider_ids; Mara says "okay, I'll cancel that one and call the next [specialty] on your list." With 2+ offers, include at least one callback and ideally one of each outcome so the demo is realistic. End with Mara recapping: the confirmed appointments and their prep, that she'll call back the offices that need rescheduling, that she'll find a replacement specialist for any cancelled one, that she'll book any required labs/imaging, and that a confirmation email with the full checklist is on the way. Thank the patient warmly for their time.`;
+    const system = `You generate a short realistic phone-call transcript where Mara (a warm, kind AI care navigator) calls the elderly patient to read out the appointment slots she just secured, walk through prep, and get an explicit decision on each one. Mara should be friendly, patient, and polite. Use "please" and "thank you" naturally — for example, "Thank you for your time," "Could you please let me know if this works?" and "I really appreciate it." Greet the patient by first name, show warmth and care, and close with gratitude. Mara MUST end the call with a warm thank you AND a clear goodbye in her final spoken turn, for example: "Thank you so much for your time today. Take care, and goodbye!" Output ONLY JSON: {"turns":[{"speaker":"mara"|"patient","text":"..."}], "outcome":{"accepted_provider_ids":["..."],"declined_provider_ids":["..."],"callback_requests":[{"provider_id":"...","reason":"...","change":"day"|"time"|"other"}],"notes":"..."}}. 10-20 turns. Warm, slow, clear language for an older adult. Mara opens by greeting the patient by first name and says she got through to the offices and wants to read out each appointment to confirm. For EACH offer Mara MUST: (1) clearly VOICE the doctor name, specialty, clinic location, and the exact day and time of the appointment; (2) read the prep checklist — what to bring (ID, insurance card, medication list), what to ask the primary care doctor to send (referral, recent notes/records), and any tests required beforehand (bloodwork, X-ray, EKG), saying for each whether the specialist's office does it in-office or whether Mara will book it separately at a lab/imaging center ("I'll add the bloodwork to your booking list"); (3) explicitly ask the patient to choose ONE of THREE options for this appointment, in these words or close to them: "Does this time work for you, would you like me to call back and ask for a different day or time, or should I cancel this doctor and try the next one on your list?" The patient picks exactly one of those three for each offer: (a) ACCEPT → accepted_provider_ids; (b) CALLBACK → Mara then asks the follow-up "Is it the day or the time that doesn't work — and what would work better?" patient gives day/time preference → callback_requests entry with change="day"|"time" and a short reason like "prefers mornings" or "not Tuesday, try later in the week"; (c) CANCEL/TRY NEXT → declined_provider_ids; Mara says "okay, I'll cancel that one and call the next [specialty] on your list." With 2+ offers, include at least one callback and ideally one of each outcome so the demo is realistic. End with Mara recapping: the confirmed appointments and their prep, that she'll call back the offices that need rescheduling, that she'll find a replacement specialist for any cancelled one, that she'll book any required labs/imaging, and that a confirmation email with the full checklist is on the way. Mara must close with a warm thank you and a clear goodbye.`;
 
 
     const offerLines = data.offers
@@ -575,7 +598,7 @@ export const generatePatientConfirmDialog = createServerFn({ method: "POST" })
         turns: [
           {
             speaker: "mara" as const,
-            text: `Hi ${data.patient_name.split(" ")[0]}, this is Mara. I was able to secure ${data.offers.length} appointment${data.offers.length === 1 ? "" : "s"} for you. Thank you so much for your time. I'll email the details now — please reply if anything needs to change. Take care.`,
+            text: `Hi ${data.patient_name.split(" ")[0]}, this is Mara. I was able to secure ${data.offers.length} appointment${data.offers.length === 1 ? "" : "s"} for you. Thank you so much for your time. I'll email the details now — please reply if anything needs to change. Goodbye, and take care!`,
           },
         ],
         outcome: {
@@ -597,7 +620,7 @@ export const generatePatientConfirmDialog = createServerFn({ method: "POST" })
       throw new Error("Bad JSON from model");
     }
     return {
-      turns: Array.isArray(parsed.turns) ? parsed.turns : [],
+      turns: ensureMaraClosing(Array.isArray(parsed.turns) ? parsed.turns : []),
       outcome: parsed.outcome ?? { accepted_provider_ids: [], declined_provider_ids: [] },
       mara_voice_id: MARA_VOICE,
       patient_voice_id: pickPatientVoice(data.patient_name),
