@@ -93,6 +93,7 @@ const DialogInput = z.object({
 
   recall_reason: z.string().optional().nullable(),
   previous_slot: z.string().optional().nullable(),
+  busy_slots: z.array(z.string()).optional().default([]),
 });
 
 
