@@ -139,6 +139,8 @@ export function BatchCallSimulator({ patient, providers, preferences, onReset, o
     }>
   >([]);
 
+  useEffect(() => { callsRef.current = calls; }, [calls]);
+
   const genDialog = useServerFn(generateBookingDialog);
   const genConfirm = useServerFn(generatePatientConfirmDialog);
   const tts = useServerFn(synthesizeVoice);
