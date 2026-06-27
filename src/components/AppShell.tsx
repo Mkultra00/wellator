@@ -100,7 +100,7 @@ export function AppShell({ children }: { children: ReactNode }) {
                           <span className="text-xs text-muted-foreground">
                             🛡️ {p.insurance.payer}
                             {p.insurance.plan ? ` · ${p.insurance.plan}` : ""}
-                            {p.insurance.member_id ? ` · #${p.insurance.member_id}` : ""}
+                            {p.insurance.referral_required ? " · referral required" : ""}
                           </span>
                         )}
                       </div>
