@@ -16,6 +16,7 @@ import { Mic, MicOff, Phone, PhoneOff, Loader2, AlertCircle, Paperclip, Camera, 
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import type { Patient } from "@/lib/patient-context";
+import avatarAsset from "@/assets/wellator-avatar.png.asset.json";
 
 
 type Turn = { role: "user" | "agent"; text: string; at: string };
@@ -448,18 +449,25 @@ function VoicePanelInner({ patient, scenario, context, onClose }: Props) {
 function VoiceOrb({ active, speaking }: { active: boolean; speaking: boolean }) {
   return (
     <div className="relative">
-      <div
+      <img
+        src={avatarAsset.url}
+        alt="Wellator"
         className={cn(
-          "h-14 w-14 rounded-full border-2 transition-all",
+          "h-14 w-14 rounded-full border-2 object-cover transition-all",
           active
             ? speaking
-              ? "border-primary bg-primary animate-pulse"
-              : "border-primary bg-primary/30"
-            : "border-muted-foreground/40 bg-muted",
+              ? "border-primary shadow-lg shadow-primary/30"
+              : "border-primary/60"
+            : "border-muted-foreground/40 opacity-80 grayscale",
         )}
+        width={56}
+        height={56}
       />
       {active && speaking && (
         <div className="absolute inset-0 animate-ping rounded-full border-2 border-primary/60" />
+      )}
+      {active && speaking && (
+        <div className="absolute -inset-1 rounded-full border border-primary/30" />
       )}
     </div>
   );
