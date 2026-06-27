@@ -51,7 +51,10 @@ const DialogInput = z.object({
     max_distance_miles: z.number().optional().nullable(),
     notes: z.string().optional().nullable(),
   }),
+  recall_reason: z.string().optional().nullable(),
+  previous_slot: z.string().optional().nullable(),
 });
+
 
 export type DialogTurn = { speaker: "mara" | "office"; text: string };
 export type DialogOutcome =
