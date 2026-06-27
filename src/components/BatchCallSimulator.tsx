@@ -20,7 +20,11 @@ import {
   Loader2,
   Mail,
   UserRound,
+  MapPin,
+  CalendarClock,
+  BellRing,
 } from "lucide-react";
+import { Switch } from "@/components/ui/switch";
 import { cn } from "@/lib/utils";
 import {
   generateBookingDialog,
