@@ -72,7 +72,7 @@ type Props = {
   onClose: () => void;
 };
 
-const DIALOG_TIMEOUT_MS = 14000;
+const DIALOG_TIMEOUT_MS = 4000;
 const TTS_TIMEOUT_MS = 8000;
 const AUDIO_TIMEOUT_MS = 12000;
 
@@ -149,7 +149,11 @@ export function BatchCallSimulator({ patient, providers, preferences, onReset, o
 
   useEffect(() => {
     return () => {
-      cancelRef.current = true;
+      // Do not flip cancelRef here. React StrictMode runs effect cleanup once
+      // during development immediately after mount; that was cancelling the
+      // auto-started booking run and leaving the UI stuck on "On the line"
+      // with no transcript. The Close/New batch controls unmount/reset the
+      // panel, and pausing any current audio is enough for cleanup.
       audioRef.current?.pause();
     };
   }, []);
@@ -1085,6 +1089,7 @@ function CallRow({
 }) {
   const { provider, status, outcome, turns, revealed } = call;
   const visibleTurns = turns.slice(0, revealed);
+  const isWaitingForTranscript = isActive && visibleTurns.length === 0;
   return (
     <div
       className={cn(
@@ -1129,8 +1134,16 @@ function CallRow({
         </div>
       </div>
 
-      {visibleTurns.length > 0 && (
+      {(visibleTurns.length > 0 || isWaitingForTranscript) && (
         <div className="mt-3 space-y-2 rounded-md border border-border bg-background p-3">
+          {isWaitingForTranscript && (
+            <div className="rounded bg-primary/10 px-2 py-1.5 text-sm">
+              <div className="mb-0.5 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+                Mara (for {patientName})
+              </div>
+              Calling {provider.name}'s office now… if the AI voice service is slow, Mara will switch to a transcript-only fallback in a few seconds.
+            </div>
+          )}
           {visibleTurns.map((t, idx) => (
             <div
               key={idx}
