@@ -163,13 +163,28 @@ function nextSlot(
   const days = (preferences.days ?? []).filter(Boolean);
   const dayList = days.length ? days : ["Tuesday", "Wednesday", "Thursday", "Monday", "Friday"];
   const baseTime = choosePreferredTime(preferences.time_of_day);
-  const offset = (stableHash(providerName) % 3) + 1;
-  const altTimes = [baseTime, "9:00 AM", "11:30 AM", "1:45 PM", "3:15 PM", "4:30 PM"];
+  const h = stableHash(providerName);
+  const offset = (h % 5) + 1;
+  // Wider, provider-specific time pool so two offices don't keep parroting
+  // the same "10:15 / 2:30" pair.
+  const POOL = [
+    "8:15 AM", "8:45 AM", "9:00 AM", "9:30 AM", "10:00 AM", "10:15 AM",
+    "10:45 AM", "11:15 AM", "11:30 AM", "12:00 PM", "1:00 PM", "1:30 PM",
+    "1:45 PM", "2:15 PM", "2:30 PM", "3:00 PM", "3:15 PM", "3:45 PM",
+    "4:00 PM", "4:30 PM", "4:45 PM",
+  ];
+  // Rotate the pool by a provider-specific amount so each office prefers a
+  // different ordering, then put the patient's preferred time first.
+  const rot = h % POOL.length;
+  const rotated = [...POOL.slice(rot), ...POOL.slice(0, rot)];
+  const altTimes = [baseTime, ...rotated.filter((t) => t !== baseTime)];
   const busyTs = busySlots.map(parseSlotTs).filter((t): t is number => t !== null);
   const BLOCK_MS = 120 * 60_000;
-  for (const day of dayList) {
-    for (let d = 0; d < 5; d++) {
-      const dateNum = 14 + offset + d;
+  // Stagger which day each provider tries first.
+  const rotatedDays = [...dayList.slice(h % dayList.length), ...dayList.slice(0, h % dayList.length)];
+  for (const day of rotatedDays) {
+    for (let d = 0; d < 6; d++) {
+      const dateNum = 7 + ((h + d * 3 + offset) % 21);
       for (const time of altTimes) {
         const candidate = `${day}, July ${dateNum} at ${time}`;
         const ts = parseSlotTs(candidate);
@@ -178,7 +193,7 @@ function nextSlot(
       }
     }
   }
-  return `${dayList[0]}, July ${14 + offset} at ${baseTime}`;
+  return `${rotatedDays[0]}, July ${7 + offset} at ${baseTime}`;
 }
 
 function prepForSpecialty(specialty: string): PrepItem[] {
