@@ -242,16 +242,22 @@ export const saveBookingCall = createServerFn({ method: "POST" })
     return { ok: true };
   });
 
-export const listCallLogs = createServerFn({ method: "GET" }).handler(async () => {
-  const db = await admin();
-  const { data, error } = await db
-    .from("call_logs")
-    .select("id,patient_id,scenario,started_at,ended_at,transcript,outcome,patients(full_name)")
-    .order("started_at", { ascending: false })
-    .limit(100);
-  if (error) throw new Error(error.message);
-  return data ?? [];
-});
+export const listCallLogs = createServerFn({ method: "GET" })
+  .inputValidator((d) => z.object({ patient_id: z.string().optional() }).optional().parse(d))
+  .handler(async ({ data }) => {
+    const db = await admin();
+    let q = db
+      .from("call_logs")
+      .select("id,patient_id,scenario,started_at,ended_at,transcript,outcome,patients(full_name)")
+      .order("started_at", { ascending: false })
+      .limit(100);
+    if (data?.patient_id) {
+      q = q.eq("patient_id", data.patient_id);
+    }
+    const { data: rows, error } = await q;
+    if (error) throw new Error(error.message);
+    return rows ?? [];
+  });
 
 export const adminDashboardData = createServerFn({ method: "GET" }).handler(async () => {
   const db = await admin();
