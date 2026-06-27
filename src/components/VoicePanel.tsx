@@ -302,7 +302,76 @@ export function VoicePanel({ patient, scenario, context, onClose }: Props) {
               {isSpeaking ? "Mara is speaking" : "Listening"}
             </div>
           )}
+          {scenario === "billing_explainer" && (
+            <>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*,application/pdf"
+                multiple
+                hidden
+                onChange={(e) => {
+                  handleFiles(e.target.files);
+                  e.target.value = "";
+                }}
+              />
+              <input
+                ref={cameraInputRef}
+                type="file"
+                accept="image/*"
+                capture="environment"
+                hidden
+                onChange={(e) => {
+                  handleFiles(e.target.files);
+                  e.target.value = "";
+                }}
+              />
+              <Button variant="outline" size="lg" onClick={() => fileInputRef.current?.click()} className="gap-2">
+                <Paperclip className="h-4 w-4" /> Attach bill / photo / PDF
+              </Button>
+              <Button variant="outline" size="lg" onClick={() => cameraInputRef.current?.click()} className="gap-2">
+                <Camera className="h-4 w-4" /> Take photo
+              </Button>
+            </>
+          )}
         </div>
+
+        {attachments.length > 0 && (
+          <div className="flex flex-wrap gap-2">
+            {attachments.map((a) => (
+              <div
+                key={a.id}
+                className="group relative flex items-center gap-2 rounded-md border border-border bg-background p-2 pr-8 text-xs"
+              >
+                {a.previewUrl ? (
+                  <img src={a.previewUrl} alt={a.filename} className="h-10 w-10 rounded object-cover" />
+                ) : (
+                  <FileText className="h-10 w-10 text-muted-foreground" />
+                )}
+                <div className="max-w-[12rem]">
+                  <div className="truncate font-medium">{a.filename}</div>
+                  <div className="text-muted-foreground">
+                    {a.status === "analyzing" && (
+                      <span className="inline-flex items-center gap-1">
+                        <Loader2 className="h-3 w-3 animate-spin" /> Analyzing…
+                      </span>
+                    )}
+                    {a.status === "ready" && "Shared with Mara"}
+                    {a.status === "error" && <span className="text-destructive">Failed</span>}
+                  </div>
+                </div>
+                <button
+                  onClick={() => removeAttachment(a.id)}
+                  className="absolute right-1 top-1 rounded p-0.5 text-muted-foreground hover:bg-muted"
+                  aria-label="Remove attachment"
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+
 
         {error && (
           <div className="rounded-md border border-destructive/50 bg-destructive/10 p-3 text-sm text-destructive">
