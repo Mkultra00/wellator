@@ -40,6 +40,7 @@ type CallState = {
   turns: DialogTurn[];
   revealed: number; // how many turns shown so far
   outcome?: DialogOutcome;
+  decision?: "accepted" | "rejected" | "cancelled";
 };
 
 function scoreOutcome(o: DialogOutcome | undefined, prefs: BookingPrefs, provider: PickedProvider) {
