@@ -64,8 +64,12 @@ function scoreOutcome(o: DialogOutcome | undefined, prefs: BookingPrefs, provide
 }
 
 // Parse a slot like "Tuesday, July 16 at 10:15 AM" into a sortable timestamp.
-// Returns null if it can't be parsed. Assumes 60-minute visit duration.
+// Visits are 60 minutes and must be spaced at least 60 minutes apart on the
+// same day, so we treat each slot as occupying a 120-minute window for
+// conflict-detection purposes (visit + buffer).
 const VISIT_MIN = 60;
+const GAP_MIN = 60;
+const BLOCK_MIN = VISIT_MIN + GAP_MIN;
 function parseSlot(slot: string | null | undefined): { start: number; end: number; label: string } | null {
   if (!slot) return null;
   const m = slot.match(/([A-Za-z]+),?\s+([A-Za-z]+)\s+(\d{1,2})(?:,\s*(\d{4}))?\s+at\s+(\d{1,2}):(\d{2})\s*([AaPp][Mm])/);
@@ -82,10 +86,12 @@ function parseSlot(slot: string | null | undefined): { start: number; end: numbe
   return { start, end: start + VISIT_MIN * 60_000, label: slot };
 }
 
+// True when two slots are on the same day AND their start times are < 60 min
+// of buffer apart (i.e. visits overlap or there isn't a full hour between them).
 function slotsOverlap(a: string | null | undefined, b: string | null | undefined): boolean {
   const pa = parseSlot(a); const pb = parseSlot(b);
   if (!pa || !pb) return false;
-  return pa.start < pb.end && pb.start < pa.end;
+  return Math.abs(pa.start - pb.start) < BLOCK_MIN * 60_000;
 }
 
 type Props = {
@@ -329,7 +335,7 @@ export function BatchCallSimulator({ patient, providers, preferences, onReset, o
 
   async function prepareDialog(
     provider: PickedProvider,
-    opts?: { recall_reason?: string; previous_slot?: string | null },
+    opts?: { recall_reason?: string; previous_slot?: string | null; busy_slots?: string[] },
   ): Promise<PreparedDialog | null> {
     const recallNote = opts?.recall_reason ? `Patient asked to reschedule — ${opts.recall_reason}` : null;
     const mergedNotes = [preferences.notes, recallNote].filter(Boolean).join(". ");
@@ -353,6 +359,7 @@ export function BatchCallSimulator({ patient, providers, preferences, onReset, o
             },
             recall_reason: opts?.recall_reason ?? null,
             previous_slot: opts?.previous_slot ?? null,
+            busy_slots: opts?.busy_slots ?? [],
           },
         }),
         new Promise<PreparedDialog>((resolve) =>
@@ -420,7 +427,7 @@ export function BatchCallSimulator({ patient, providers, preferences, onReset, o
   async function runOne(
     idx: number,
     provider: PickedProvider,
-    opts?: { recall_reason?: string; previous_slot?: string | null },
+    opts?: { recall_reason?: string; previous_slot?: string | null; busy_slots?: string[] },
   ) {
     setCalls((prev) =>
       prev.map((c, i) => (i === idx ? { ...c, status: "live", turns: [], revealed: 0 } : c)),
@@ -441,19 +448,16 @@ export function BatchCallSimulator({ patient, providers, preferences, onReset, o
   async function runAll() {
     setPhase("running");
     cancelRef.current = false;
-    const pending = providers.map((p, i) => ({
-      i,
-      p,
-      promise: prepareDialog(p).then((d) => ({ i, p, d })),
-    }));
-    while (pending.length > 0) {
+    // Run sequentially so Mara can tell each subsequent office which times
+    // are already taken (≥60-min spacing on the same day) and ask for a
+    // non-conflicting slot up front instead of needing a callback later.
+    const bookedSlots: string[] = [];
+    for (let i = 0; i < providers.length; i++) {
       if (cancelRef.current) return;
-      const { i, d } = await Promise.race(pending.map((item) => item.promise));
-      const doneIdx = pending.findIndex((item) => item.i === i);
-      if (doneIdx >= 0) pending.splice(doneIdx, 1);
       setActiveIdx(i);
+      const dialog = await prepareDialog(providers[i], { busy_slots: [...bookedSlots] });
       if (cancelRef.current) return;
-      if (!d) {
+      if (!dialog) {
         setCalls((prev) =>
           prev.map((c, idx) =>
             idx === i ? { ...c, status: "done", outcome: { kind: "no_availability" } } : c,
@@ -461,7 +465,10 @@ export function BatchCallSimulator({ patient, providers, preferences, onReset, o
         );
         continue;
       }
-      await playDialog(i, providers[i], d);
+      await playDialog(i, providers[i], dialog);
+      if (dialog.outcome.kind === "offered") {
+        bookedSlots.push((dialog.outcome as { slot: string }).slot);
+      }
     }
     setPhase("finished");
   }
@@ -723,7 +730,23 @@ export function BatchCallSimulator({ patient, providers, preferences, onReset, o
 
 
 
-  function confirmBooking(i: number) {
+  // Collect every offered slot we should treat as "busy" when calling another
+  // office — accepted bookings plus any other live offer that's still on the
+  // table (so Mara doesn't double-book the patient).
+  function busySlotsExcluding(excludeIdx: number): string[] {
+    return calls
+      .map((c, idx) => ({ c, idx }))
+      .filter(
+        ({ c, idx }) =>
+          idx !== excludeIdx &&
+          c.decision !== "cancelled" &&
+          c.decision !== "rejected" &&
+          c.outcome?.kind === "offered",
+      )
+      .map(({ c }) => (c.outcome as { slot: string }).slot);
+  }
+
+  async function confirmBooking(i: number) {
     const target = calls[i];
     const targetSlot = target.outcome?.kind === "offered" ? (target.outcome as { slot: string }).slot : null;
     const conflict = calls.find(
@@ -734,9 +757,35 @@ export function BatchCallSimulator({ patient, providers, preferences, onReset, o
         slotsOverlap(targetSlot, (c.outcome as { slot: string }).slot),
     );
     if (conflict) {
-      toast.error(
-        `Time conflict with ${conflict.provider.name} (${(conflict.outcome as { slot: string }).slot}). Recall this office for a different time.`,
+      const otherSlot = (conflict.outcome as { slot: string }).slot;
+      toast.warning(
+        `Time conflict with ${conflict.provider.name} (${otherSlot}). Mara is calling ${target.provider.name} back to ask for a different time at least an hour away.`,
       );
+      const prevSlot = targetSlot;
+      setCalls((prev) =>
+        prev.map((c, idx) =>
+          idx === i
+            ? {
+                ...c,
+                status: "queued",
+                outcome: undefined,
+                turns: [],
+                revealed: 0,
+                decision: undefined,
+                recall_reason: `conflicts with ${conflict.provider.name} at ${otherSlot} — need a different day or a time at least one hour away`,
+                origin: "callback",
+              }
+            : c,
+        ),
+      );
+      setActiveIdx(i);
+      setPhase("running");
+      await runOne(i, target.provider, {
+        recall_reason: `conflicts with ${conflict.provider.name} at ${otherSlot} — need a different day, or at least 60 minutes away on the same day`,
+        previous_slot: prevSlot,
+        busy_slots: busySlotsExcluding(i),
+      });
+      setPhase("finished");
       return;
     }
     setConfirmedIdx(i);
@@ -775,6 +824,7 @@ export function BatchCallSimulator({ patient, providers, preferences, onReset, o
     await runOne(i, target.provider, {
       recall_reason: reason || undefined,
       previous_slot: prevSlot,
+      busy_slots: busySlotsExcluding(i),
     });
     setPhase("finished");
   }

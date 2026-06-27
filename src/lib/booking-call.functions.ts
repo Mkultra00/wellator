@@ -93,6 +93,7 @@ const DialogInput = z.object({
 
   recall_reason: z.string().optional().nullable(),
   previous_slot: z.string().optional().nullable(),
+  busy_slots: z.array(z.string()).optional().default([]),
 });
 
 
@@ -137,11 +138,47 @@ function choosePreferredTime(timeOfDay?: string | string[] | null) {
   return "10:15 AM";
 }
 
-function nextSlot(providerName: string, preferences: z.infer<typeof DialogInput>["preferences"]) {
-  const day = choosePreferredDay(preferences.days);
-  const time = choosePreferredTime(preferences.time_of_day);
+// Parse a slot label like "Tuesday, July 16 at 10:15 AM" into a timestamp for
+// conflict checking. Mirrors the client-side parser; assumes 60-minute visit.
+function parseSlotTs(slot: string): number | null {
+  const m = slot.match(/([A-Za-z]+),?\s+([A-Za-z]+)\s+(\d{1,2})(?:,\s*(\d{4}))?\s+at\s+(\d{1,2}):(\d{2})\s*([AaPp][Mm])/);
+  if (!m) return null;
+  const [, , monthName, dayStr, yearStr, hStr, minStr, ampm] = m;
+  const months = ["january","february","march","april","may","june","july","august","september","october","november","december"];
+  const mi = months.indexOf(monthName.toLowerCase());
+  if (mi < 0) return null;
+  let h = parseInt(hStr, 10) % 12;
+  if (ampm.toUpperCase() === "PM") h += 12;
+  const year = yearStr ? parseInt(yearStr, 10) : new Date().getFullYear();
+  return new Date(year, mi, parseInt(dayStr, 10), h, parseInt(minStr, 10)).getTime();
+}
+
+// Build a slot that doesn't sit within 120 minutes (60-min visit + 60-min
+// buffer) of any already-booked slot on the same day.
+function nextSlot(
+  providerName: string,
+  preferences: z.infer<typeof DialogInput>["preferences"],
+  busySlots: string[] = [],
+) {
+  const days = (preferences.days ?? []).filter(Boolean);
+  const dayList = days.length ? days : ["Tuesday", "Wednesday", "Thursday", "Monday", "Friday"];
+  const baseTime = choosePreferredTime(preferences.time_of_day);
   const offset = (stableHash(providerName) % 3) + 1;
-  return `${day}, July ${14 + offset} at ${time}`;
+  const altTimes = [baseTime, "9:00 AM", "11:30 AM", "1:45 PM", "3:15 PM", "4:30 PM"];
+  const busyTs = busySlots.map(parseSlotTs).filter((t): t is number => t !== null);
+  const BLOCK_MS = 120 * 60_000;
+  for (const day of dayList) {
+    for (let d = 0; d < 5; d++) {
+      const dateNum = 14 + offset + d;
+      for (const time of altTimes) {
+        const candidate = `${day}, July ${dateNum} at ${time}`;
+        const ts = parseSlotTs(candidate);
+        const clash = ts != null && busyTs.some((b) => Math.abs(b - ts) < BLOCK_MS);
+        if (!clash) return candidate;
+      }
+    }
+  }
+  return `${dayList[0]}, July ${14 + offset} at ${baseTime}`;
 }
 
 function prepForSpecialty(specialty: string): PrepItem[] {
@@ -180,7 +217,7 @@ function deterministicAvailabilityDialog(args: {
   plan: string | null;
   reason?: string;
 }) {
-  const slot = nextSlot(args.data.provider_name, args.data.preferences);
+  const slot = nextSlot(args.data.provider_name, args.data.preferences, args.data.busy_slots ?? []);
   const prep = prepForSpecialty(args.data.provider_specialty);
   const noAvailability = stableHash(`${args.data.provider_name}:${args.data.provider_specialty}`) % 5 === 0;
   const insuranceLine = args.payer ? `${args.payer}${args.plan ? ` ${args.plan}` : ""}` : "the insurance on file";
@@ -269,7 +306,9 @@ CRITICAL FACT-USE RULES — do NOT invent or alter patient facts:
 
 If this is a CALLBACK (the user prompt will say so), Mara's opening instead references the previously offered slot, explains the patient asked to reschedule with the reason (day vs time), and asks for an alternative — still using the exact patient name, PCP, and insurance from the user message.
 
-When the office OFFERS a slot, BEFORE the call wraps Mara must ask: "Is there anything the patient should bring or have done before the visit — referral, recent records, bloodwork, imaging, EKG?" The receptionist answers with 1-4 specific prep items appropriate to the specialty (e.g. cardiology often wants a recent EKG + lipid panel; orthopedics wants recent imaging of the affected joint; GI may want fasting bloodwork; many want a referral from PCP + photo ID + insurance card + medication list). Encode each in outcome.prep; bookable=true ONLY if it needs a separate appointment elsewhere (lab draw, imaging center, outpatient EKG). If the specialist will do it in-office, use category "in_office" and bookable=false. Otherwise return no_availability with a concrete next open date. Vary outcomes ~80% offered / ~20% no_availability / 0% voicemail.`;
+When the office OFFERS a slot, BEFORE the call wraps Mara must ask: "Is there anything the patient should bring or have done before the visit — referral, recent records, bloodwork, imaging, EKG?" The receptionist answers with 1-4 specific prep items appropriate to the specialty (e.g. cardiology often wants a recent EKG + lipid panel; orthopedics wants recent imaging of the affected joint; GI may want fasting bloodwork; many want a referral from PCP + photo ID + insurance card + medication list). Encode each in outcome.prep; bookable=true ONLY if it needs a separate appointment elsewhere (lab draw, imaging center, outpatient EKG). If the specialist will do it in-office, use category "in_office" and bookable=false. Otherwise return no_availability with a concrete next open date. Vary outcomes ~80% offered / ~20% no_availability / 0% voicemail.
+
+SCHEDULING CONFLICTS — the user message may list BUSY_SLOTS the patient already has on the calendar. Mara MUST mention these to the office up front ("the patient already has an appointment at <slot>, so please find something on a different day or at least an hour before or after") and the office MUST offer a slot that is either on a different day OR on the same day with at least 60 minutes of buffer between the end of one visit and the start of the next (visits run about an hour). NEVER offer or book a slot that lands within 60 minutes of any BUSY_SLOT on the same day. If the only same-day option would conflict, pick a different day.`;
 
     const payer = insurance?.payer ?? null;
     const plan = insurance?.plan ?? null;
@@ -295,11 +334,15 @@ When the office OFFERS a slot, BEFORE the call wraps Mara must ask: "Is there an
       ? `\n*** CALLBACK *** Previously offered: ${data.previous_slot ?? "an earlier slot"}. Patient asked to reschedule. Reason: ${data.recall_reason}. Mara must use the OPENING_LINE verbatim and request a different ${/(day|date|weekday)/i.test(data.recall_reason) ? "day" : "time"} that still fits preferences.`
       : "";
 
+    const busyLine = (data.busy_slots && data.busy_slots.length)
+      ? `\nBUSY_SLOTS (already booked for this patient — DO NOT offer or book any slot within 60 minutes of these on the same day; prefer a different day):\n- ${data.busy_slots.join("\n- ")}`
+      : "";
+
     const user = `Patient: ${data.patient_name}
 ${refLine}
 ${insLine}
 Calling: ${data.provider_name}, ${data.provider_specialty} — ${data.provider_location}
-${prefLine}${recallLine}
+${prefLine}${recallLine}${busyLine}
 
 OPENING_LINE (Mara's first turn must use this verbatim, then optionally add one short sentence requesting the appointment):
 "${canonicalOpeningLine}"`;
