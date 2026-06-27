@@ -163,13 +163,28 @@ function nextSlot(
   const days = (preferences.days ?? []).filter(Boolean);
   const dayList = days.length ? days : ["Tuesday", "Wednesday", "Thursday", "Monday", "Friday"];
   const baseTime = choosePreferredTime(preferences.time_of_day);
-  const offset = (stableHash(providerName) % 3) + 1;
-  const altTimes = [baseTime, "9:00 AM", "11:30 AM", "1:45 PM", "3:15 PM", "4:30 PM"];
+  const h = stableHash(providerName);
+  const offset = (h % 5) + 1;
+  // Wider, provider-specific time pool so two offices don't keep parroting
+  // the same "10:15 / 2:30" pair.
+  const POOL = [
+    "8:15 AM", "8:45 AM", "9:00 AM", "9:30 AM", "10:00 AM", "10:15 AM",
+    "10:45 AM", "11:15 AM", "11:30 AM", "12:00 PM", "1:00 PM", "1:30 PM",
+    "1:45 PM", "2:15 PM", "2:30 PM", "3:00 PM", "3:15 PM", "3:45 PM",
+    "4:00 PM", "4:30 PM", "4:45 PM",
+  ];
+  // Rotate the pool by a provider-specific amount so each office prefers a
+  // different ordering, then put the patient's preferred time first.
+  const rot = h % POOL.length;
+  const rotated = [...POOL.slice(rot), ...POOL.slice(0, rot)];
+  const altTimes = [baseTime, ...rotated.filter((t) => t !== baseTime)];
   const busyTs = busySlots.map(parseSlotTs).filter((t): t is number => t !== null);
   const BLOCK_MS = 120 * 60_000;
-  for (const day of dayList) {
-    for (let d = 0; d < 5; d++) {
-      const dateNum = 14 + offset + d;
+  // Stagger which day each provider tries first.
+  const rotatedDays = [...dayList.slice(h % dayList.length), ...dayList.slice(0, h % dayList.length)];
+  for (const day of rotatedDays) {
+    for (let d = 0; d < 6; d++) {
+      const dateNum = 7 + ((h + d * 3 + offset) % 21);
       for (const time of altTimes) {
         const candidate = `${day}, July ${dateNum} at ${time}`;
         const ts = parseSlotTs(candidate);
@@ -178,7 +193,7 @@ function nextSlot(
       }
     }
   }
-  return `${dayList[0]}, July ${14 + offset} at ${baseTime}`;
+  return `${rotatedDays[0]}, July ${7 + offset} at ${baseTime}`;
 }
 
 function prepForSpecialty(specialty: string): PrepItem[] {
@@ -308,7 +323,9 @@ If this is a CALLBACK (the user prompt will say so), Mara's opening instead refe
 
 When the office OFFERS a slot, BEFORE the call wraps Mara must ask: "Is there anything the patient should bring or have done before the visit — referral, recent records, bloodwork, imaging, EKG?" The receptionist answers with 1-4 specific prep items appropriate to the specialty (e.g. cardiology often wants a recent EKG + lipid panel; orthopedics wants recent imaging of the affected joint; GI may want fasting bloodwork; many want a referral from PCP + photo ID + insurance card + medication list). Encode each in outcome.prep; bookable=true ONLY if it needs a separate appointment elsewhere (lab draw, imaging center, outpatient EKG). If the specialist will do it in-office, use category "in_office" and bookable=false. Otherwise return no_availability with a concrete next open date. Vary outcomes ~80% offered / ~20% no_availability / 0% voicemail.
 
-SCHEDULING CONFLICTS — the user message may list BUSY_SLOTS the patient already has on the calendar. Mara MUST mention these to the office up front ("the patient already has an appointment at <slot>, so please find something on a different day or at least an hour before or after") and the office MUST offer a slot that is either on a different day OR on the same day with at least 60 minutes of buffer between the end of one visit and the start of the next (visits run about an hour). NEVER offer or book a slot that lands within 60 minutes of any BUSY_SLOT on the same day. If the only same-day option would conflict, pick a different day.`;
+SCHEDULING CONFLICTS — the user message may list BUSY_SLOTS the patient already has on the calendar. Mara MUST mention these to the office up front ("the patient already has an appointment at <slot>, so please find something on a different day or at least an hour before or after") and the office MUST offer a slot that is either on a different day OR on the same day with at least 60 minutes of buffer between the end of one visit and the start of the next (visits run about an hour). NEVER offer or book a slot that lands within 60 minutes of any BUSY_SLOT on the same day. If the only same-day option would conflict, pick a different day.
+
+TIME DIVERSITY — every office has its own calendar. DO NOT default to the same canned times across calls (avoid always saying "10:15 AM" or "2:30 PM"). Pick exact clock times that vary by office: use a mix across 8:15a, 8:45a, 9:00a, 9:30a, 10:00a, 10:45a, 11:15a, 11:30a, 12:00p, 1:00p, 1:30p, 1:45p, 2:15p, 3:00p, 3:15p, 3:45p, 4:00p, 4:30p, 4:45p. Vary the weekday too. Do not reuse the slot from a previous office in this batch.`;
 
     const payer = insurance?.payer ?? null;
     const plan = insurance?.plan ?? null;
