@@ -47,12 +47,23 @@ type Props = {
 };
 
 export function VoicePanel(props: Props) {
+  // Swallow ElevenLabs SDK's malformed error packets (it reads .error_type on
+  // undefined and the unhandled rejection terminates the WebRTC session).
+  useEffect(() => {
+    const onRejection = (e: PromiseRejectionEvent) => {
+      const msg = String(e.reason?.message ?? e.reason ?? "");
+      if (msg.includes("error_type")) e.preventDefault();
+    };
+    window.addEventListener("unhandledrejection", onRejection);
+    return () => window.removeEventListener("unhandledrejection", onRejection);
+  }, []);
   return (
     <ConversationProvider>
       <VoicePanelInner {...props} />
     </ConversationProvider>
   );
 }
+
 
 function VoicePanelInner({ patient, scenario, context, onClose }: Props) {
   const panelRef = useRef<HTMLDivElement>(null);
