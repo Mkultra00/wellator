@@ -191,7 +191,7 @@ export function BatchCallSimulator({ patient, providers, preferences, onReset, o
     );
   }
 
-  async function runAll() {
+  const runAll = useCallback(async () => {
     setPhase("running");
     cancelRef.current = false;
     for (let i = 0; i < providers.length; i++) {
@@ -200,7 +200,91 @@ export function BatchCallSimulator({ patient, providers, preferences, onReset, o
       await runOne(i);
     }
     setPhase("finished");
-  }
+  }, [providers.length]);
+
+  // Auto-start as soon as the booking context is loaded.
+  useEffect(() => {
+    if (ctx && !startedRef.current) {
+      startedRef.current = true;
+      runAll();
+    }
+  }, [ctx, runAll]);
+
+  // After all office calls finish, if Mara secured any offers, call the patient
+  // to read them out and confirm, then "email" the confirmation.
+  useEffect(() => {
+    if (phase !== "finished") return;
+    const offers = calls
+      .filter((c) => c.outcome?.kind === "offered")
+      .map((c) => ({
+        provider_id: c.provider.id,
+        provider_name: c.provider.name,
+        specialty: c.provider.specialty,
+        location: c.provider.location,
+        slot: (c.outcome as { slot: string }).slot,
+      }));
+    if (offers.length === 0) return;
+    let cancelled = false;
+    (async () => {
+      setPhase("confirming");
+      setConfirmTurns([]);
+      setConfirmRevealed(0);
+      let confirm;
+      try {
+        confirm = await genConfirm({
+          data: { patient_name: patient.full_name, offers },
+        });
+      } catch (e) {
+        toast.error("Patient confirmation call failed", {
+          description: e instanceof Error ? e.message : "Dialog generation failed",
+        });
+        setPhase("finished");
+        return;
+      }
+      if (cancelled) return;
+      setConfirmTurns(confirm.turns);
+      for (let t = 0; t < confirm.turns.length; t++) {
+        if (cancelRef.current || cancelled) return;
+        const turn = confirm.turns[t];
+        const voiceId = turn.speaker === "mara" ? confirm.mara_voice_id : confirm.patient_voice_id;
+        let audio: { audio_base64: string } | null = null;
+        try {
+          audio = await tts({ data: { text: turn.text, voice_id: voiceId } });
+        } catch {}
+        setConfirmRevealed(t + 1);
+        if (audio) await playAudio(audio.audio_base64);
+        else await new Promise((r) => setTimeout(r, 600));
+      }
+      if (cancelled) return;
+      const accepted = new Set(confirm.outcome.accepted_provider_ids ?? []);
+      setCalls((prev) =>
+        prev.map((c) =>
+          accepted.has(c.provider.id) ? { ...c, decision: "accepted" } : c,
+        ),
+      );
+      const acceptedOffers = offers.filter((o) => accepted.has(o.provider_id));
+      const finalOffers = acceptedOffers.length > 0 ? acceptedOffers : offers;
+      const subject = `Your appointment ${finalOffers.length === 1 ? "is" : "s are"} ready to confirm`;
+      const lines = finalOffers
+        .map(
+          (o) => `• ${o.provider_name} (${o.specialty}) — ${o.slot}\n  ${o.location}`,
+        )
+        .join("\n");
+      const body = `Hi ${patient.full_name.split(" ")[0]},\n\nThis is Mara following up on our call. Please confirm the following appointment${finalOffers.length === 1 ? "" : "s"}:\n\n${lines}\n\nReply YES to confirm, or call us back and we'll find another time.\n\n— Mara, your care navigator`;
+      setEmailSent({
+        to: `${patient.full_name.toLowerCase().replace(/\s+/g, ".")}@example.com`,
+        subject,
+        body,
+      });
+      setPhase("confirmed");
+      toast.success("Confirmation email sent to patient");
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [phase, calls, genConfirm, tts, patient.full_name]);
+
+
 
   function confirmBooking(i: number) {
     setConfirmedIdx(i);
