@@ -89,6 +89,15 @@ export function BatchCallSimulator({ patient, providers, preferences, onReset, o
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const cancelRef = useRef(false);
   const [ctx, setCtx] = useState<{ referring_doctor: string | null; insurance: any } | null>(null);
+  const [escalations, setEscalations] = useState<
+    Array<{
+      specialty: string;
+      declined_provider_id: string;
+      declined_provider_name: string;
+      reason: string;
+      created_at: string;
+    }>
+  >([]);
 
   const genDialog = useServerFn(generateBookingDialog);
   const genConfirm = useServerFn(generatePatientConfirmDialog);
@@ -99,6 +108,7 @@ export function BatchCallSimulator({ patient, providers, preferences, onReset, o
 
   const [network, setNetwork] = useState<{ specialists: PickedProvider[] } | null>(null);
   const patientConfirmedRef = useRef(false);
+
 
   const startedRef = useRef(false);
 
