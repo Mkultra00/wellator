@@ -94,9 +94,11 @@ export function BatchCallSimulator({ patient, providers, preferences, onReset, o
   const genConfirm = useServerFn(generatePatientConfirmDialog);
   const tts = useServerFn(synthesizeVoice);
   const fetchCtx = useServerFn(getBookingContext);
+  const fetchNetwork = useServerFn(listReferralNetwork);
   const persistCall = useServerFn(saveBookingCall);
 
-
+  const [network, setNetwork] = useState<{ specialists: PickedProvider[] } | null>(null);
+  const patientConfirmedRef = useRef(false);
 
   const startedRef = useRef(false);
 
@@ -104,7 +106,11 @@ export function BatchCallSimulator({ patient, providers, preferences, onReset, o
     fetchCtx({ data: { patient_id: patient.id } })
       .then((r) => setCtx(r))
       .catch(() => setCtx({ referring_doctor: null, insurance: null }));
-  }, [patient.id, fetchCtx]);
+    fetchNetwork({ data: { patient_id: patient.id } })
+      .then((r: any) => setNetwork({ specialists: r.specialists ?? [] }))
+      .catch(() => setNetwork({ specialists: [] }));
+  }, [patient.id, fetchCtx, fetchNetwork]);
+
 
   const allDone = phase === "finished" || phase === "confirming" || phase === "confirmed";
 
