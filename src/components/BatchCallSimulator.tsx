@@ -260,6 +260,8 @@ export function BatchCallSimulator({ patient, providers, preferences, onReset, o
       : "insurance on file";
     const referrer = bookingContext.referring_doctor ?? "the primary care provider on file";
     const prefTime = preferences.time_of_day.length ? preferences.time_of_day.join(" or ") : "any time";
+    const day = preferences.days[0] || "Tuesday";
+    const slot = `${day}, July 16 at ${prefTime === "any time" ? "10:15 AM" : prefTime}`;
     return {
       turns: [
         {
@@ -268,16 +270,36 @@ export function BatchCallSimulator({ patient, providers, preferences, onReset, o
         },
         {
           speaker: "office",
-          text: `Thanks for calling. I can't complete the scheduling check right now, but I can take a message for ${provider.name}'s scheduling team.`,
+          text: `I can check availability right now. I have ${provider.name}'s calendar open.`,
         },
         {
           speaker: "mara",
-          text: `Please note the patient prefers ${prefTime} on ${preferences.days.join(", ") || "any weekday"}, within ${preferences.max_distance_miles} miles. Please call back with available times.`,
+          text: `Please check for ${prefTime} on ${preferences.days.join(", ") || "any weekday"}, within ${preferences.max_distance_miles} miles.`,
+        },
+        {
+          speaker: "office",
+          text: `I can complete that now. I have ${slot} available and can book it while we're on the phone.`,
+        },
+        {
+          speaker: "mara",
+          text: "Please book that slot. Is there anything the patient should bring or have done before the visit?",
+        },
+        {
+          speaker: "office",
+          text: `Done — ${patient.full_name} is booked with ${provider.name} on ${slot}. Please bring photo ID, insurance card, and a medication list, and have the referral sent before the visit.`,
         },
       ],
-      outcome: { kind: "voicemail" },
+      outcome: {
+        kind: "offered",
+        slot,
+        prep: [
+          { text: "Bring photo ID, insurance card, and a current medication list", category: "bring", bookable: false },
+          { text: "Have the referring primary care doctor send the referral before the visit", category: "pcp_send", bookable: false },
+        ],
+      },
       office_voice_id: pickOfficeVoice(provider.name),
       mara_voice_id: MARA_VOICE_ID,
+      gateway_error: reason,
     } as PreparedDialog;
   }
 
@@ -364,9 +386,7 @@ export function BatchCallSimulator({ patient, providers, preferences, onReset, o
           status:
             dialog.outcome.kind === "offered"
               ? "booked"
-              : dialog.outcome.kind === "voicemail"
-                ? "needs_more_info"
-                : "no_availability",
+              : "no_availability",
         }),
       },
     }).catch(() => {});
