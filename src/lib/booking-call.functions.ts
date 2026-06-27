@@ -258,7 +258,7 @@ export const generateBookingDialog = createServerFn({ method: "POST" })
     }${prefs.notes ? `. Notes: ${prefs.notes}` : ""}`;
 
 
-    const system = `You generate realistic short phone-call transcripts between Mara (an AI care navigator calling on behalf of a patient) and a scheduler at a doctor's office. The person who answers IS the office scheduler — they have the live appointment calendar open in front of them and full authority to confirm, hold, and book slots themselves on this call. They MUST complete the scheduling check live. They must NEVER say things like "let me check with the scheduler", "I'll have to check with scheduling", "I'll need to call you back", "let me transfer you", "I'll have someone get back to you", or otherwise defer the availability check to another person, later call, or callback. Instead they say things like "Let me pull up the calendar… I have Tuesday the 14th at 10:15am or Thursday the 16th at 2:30pm — which works?" and then BOOK the chosen slot on the call ("Great, I've got you down for Thursday at 2:30 with Dr. X."). Outcomes on the call are exactly one of: a concrete offered+booked slot, a live "no availability in that window" answer with the next open date, or (rarely) voicemail because no one picked up. Output ONLY valid JSON matching: {"turns":[{"speaker":"mara"|"office","text":"..."}], "outcome": {"kind":"offered","slot":"...","prep":[{"text":"...","category":"bring"|"pcp_send"|"lab"|"imaging"|"cardiac"|"in_office"|"other","bookable":true|false}]} | {"kind":"voicemail"} | {"kind":"no_availability"}}. 6-12 turns. Natural, concise spoken lines (1-2 sentences each).
+    const system = `You generate realistic short phone-call transcripts between Mara (an AI care navigator calling on behalf of a patient) and a scheduler at a doctor's office. The person who answers IS the office scheduler — they have the live appointment calendar open in front of them and full authority to confirm, hold, and book slots themselves on this call. They MUST complete the scheduling check live. They must NEVER say things like "let me check with the scheduler", "I'll have to check with scheduling", "I'll need to call you back", "let me transfer you", "I'll have someone get back to you", "please leave a voicemail", or otherwise defer the availability check to another person, later call, voicemail, or callback. Instead they say things like "Let me pull up the calendar… I have Tuesday the 14th at 10:15am or Thursday the 16th at 2:30pm — which works?" and then BOOK the chosen slot on the call ("Great, I've got you down for Thursday at 2:30 with Dr. X."). Outcomes on the call are exactly one of: a concrete offered+booked slot, or a live "no availability in that window" answer with the next open date. Output ONLY valid JSON matching: {"turns":[{"speaker":"mara"|"office","text":"..."}], "outcome": {"kind":"offered","slot":"...","prep":[{"text":"...","category":"bring"|"pcp_send"|"lab"|"imaging"|"cardiac"|"in_office"|"other","bookable":true|false}]} | {"kind":"no_availability"}}. 6-12 turns. Natural, concise spoken lines (1-2 sentences each).
 
 CRITICAL FACT-USE RULES — do NOT invent or alter patient facts:
 - Use the patient name, referring primary care doctor, insurance payer, and plan EXACTLY as given in the user message. Copy them verbatim — never substitute other doctor names, payers (Aetna/BCBS/UHC/Medicare/etc.), or plan names.
@@ -268,7 +268,7 @@ CRITICAL FACT-USE RULES — do NOT invent or alter patient facts:
 
 If this is a CALLBACK (the user prompt will say so), Mara's opening instead references the previously offered slot, explains the patient asked to reschedule with the reason (day vs time), and asks for an alternative — still using the exact patient name, PCP, and insurance from the user message.
 
-When the office OFFERS a slot, BEFORE the call wraps Mara must ask: "Is there anything the patient should bring or have done before the visit — referral, recent records, bloodwork, imaging, EKG?" The receptionist answers with 1-4 specific prep items appropriate to the specialty (e.g. cardiology often wants a recent EKG + lipid panel; orthopedics wants recent imaging of the affected joint; GI may want fasting bloodwork; many want a referral from PCP + photo ID + insurance card + medication list). Encode each in outcome.prep; bookable=true ONLY if it needs a separate appointment elsewhere (lab draw, imaging center, outpatient EKG). If the specialist will do it in-office, use category "in_office" and bookable=false. Otherwise: no availability for ~2 weeks, or voicemail (1-2 turns, no prep). Vary outcomes ~65% offered / ~20% no_availability / ~15% voicemail.`;
+When the office OFFERS a slot, BEFORE the call wraps Mara must ask: "Is there anything the patient should bring or have done before the visit — referral, recent records, bloodwork, imaging, EKG?" The receptionist answers with 1-4 specific prep items appropriate to the specialty (e.g. cardiology often wants a recent EKG + lipid panel; orthopedics wants recent imaging of the affected joint; GI may want fasting bloodwork; many want a referral from PCP + photo ID + insurance card + medication list). Encode each in outcome.prep; bookable=true ONLY if it needs a separate appointment elsewhere (lab draw, imaging center, outpatient EKG). If the specialist will do it in-office, use category "in_office" and bookable=false. Otherwise return no_availability with a concrete next open date. Vary outcomes ~80% offered / ~20% no_availability / 0% voicemail.`;
 
     const payer = insurance?.payer ?? null;
     const plan = insurance?.plan ?? null;
@@ -345,6 +345,21 @@ OPENING_LINE (Mara's first turn must use this verbatim, then optionally add one 
       };
     }
     const turns = Array.isArray(parsed.turns) ? parsed.turns : [];
+    if (parsed.outcome?.kind === "voicemail") {
+      const fallback = deterministicAvailabilityDialog({
+        data,
+        openingLine: canonicalOpeningLine,
+        referringDoctor,
+        payer,
+        plan,
+      });
+      return {
+        ...fallback,
+        office_voice_id: pickOfficeVoice(data.provider_name),
+        mara_voice_id: MARA_VOICE,
+        gateway_error: "model_returned_voicemail",
+      };
+    }
     // Hard guarantee: Mara's first spoken turn uses the canonical opening line
     // so insurance + referring PCP are always consistent with the patient profile.
     const firstMaraIdx = turns.findIndex((t) => t?.speaker === "mara");
