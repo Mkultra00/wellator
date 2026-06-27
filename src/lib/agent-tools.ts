@@ -74,7 +74,7 @@ export async function runTool(
 
       const { data: insuranceRow } = await db
         .from("insurance_profiles")
-        .select("payer,plan,member_id")
+        .select("payer,plan")
         .eq("patient_id", patient_id)
         .maybeSingle();
 
@@ -163,7 +163,7 @@ export async function runTool(
       const { patient_id } = params as { patient_id: string };
       const { data, error } = await db
         .from("insurance_profiles")
-        .select("payer,plan,member_id,referral_required,copay_cents")
+        .select("payer,plan,referral_required,copay_cents")
         .eq("patient_id", patient_id)
         .maybeSingle();
       if (error) throw error;
