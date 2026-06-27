@@ -94,6 +94,7 @@ export function BatchCallSimulator({ patient, providers, preferences, onReset, o
   }>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const cancelRef = useRef(false);
+  const cleanupTimerRef = useRef<number | null>(null);
   const ttsFailedOnceRef = useRef(false);
   const [escalations, setEscalations] = useState<
     Array<{
@@ -148,13 +149,19 @@ export function BatchCallSimulator({ patient, providers, preferences, onReset, o
   }, [allDone, calls, preferences]);
 
   useEffect(() => {
+    if (cleanupTimerRef.current != null) {
+      window.clearTimeout(cleanupTimerRef.current);
+      cleanupTimerRef.current = null;
+    }
+    cancelRef.current = false;
     return () => {
-      // Do not flip cancelRef here. React StrictMode runs effect cleanup once
-      // during development immediately after mount; that was cancelling the
-      // auto-started booking run and leaving the UI stuck on "On the line"
-      // with no transcript. The Close/New batch controls unmount/reset the
-      // panel, and pausing any current audio is enough for cleanup.
-      audioRef.current?.pause();
+      // React StrictMode runs effect cleanup once immediately after mount in
+      // dev. Delay the real cancel by one tick so the second StrictMode setup
+      // can clear it; actual unmounts still stop any in-flight mock call.
+      cleanupTimerRef.current = window.setTimeout(() => {
+        cancelRef.current = true;
+        audioRef.current?.pause();
+      }, 0);
     };
   }, []);
 
