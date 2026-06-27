@@ -5,7 +5,7 @@
  * by the LLM as a short transcript per call, then spoken aloud turn-by-turn
  * with live transcript reveal. No human voice needed.
  */
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -19,12 +19,15 @@ import {
   ArrowRight,
   Trophy,
   Loader2,
-  Play,
+  Mail,
+  UserRound,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
   generateBookingDialog,
+  generatePatientConfirmDialog,
   synthesizeVoice,
+  type ConfirmTurn,
   type DialogTurn,
   type DialogOutcome,
 } from "@/lib/booking-call.functions";
@@ -33,6 +36,7 @@ import type { PickedProvider } from "./ProviderPicker";
 import type { BookingPrefs } from "./BookingPreferences";
 import type { Patient } from "@/lib/patient-context";
 import { toast } from "sonner";
+
 
 type CallState = {
   provider: PickedProvider;
