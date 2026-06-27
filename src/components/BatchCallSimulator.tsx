@@ -63,6 +63,31 @@ function scoreOutcome(o: DialogOutcome | undefined, prefs: BookingPrefs, provide
   return score;
 }
 
+// Parse a slot like "Tuesday, July 16 at 10:15 AM" into a sortable timestamp.
+// Returns null if it can't be parsed. Assumes 60-minute visit duration.
+const VISIT_MIN = 60;
+function parseSlot(slot: string | null | undefined): { start: number; end: number; label: string } | null {
+  if (!slot) return null;
+  const m = slot.match(/([A-Za-z]+),?\s+([A-Za-z]+)\s+(\d{1,2})(?:,\s*(\d{4}))?\s+at\s+(\d{1,2}):(\d{2})\s*([AaPp][Mm])/);
+  if (!m) return null;
+  const [, , monthName, dayStr, yearStr, hStr, minStr, ampm] = m;
+  const months = ["january","february","march","april","may","june","july","august","september","october","november","december"];
+  const mi = months.indexOf(monthName.toLowerCase());
+  if (mi < 0) return null;
+  let h = parseInt(hStr, 10) % 12;
+  if (ampm.toUpperCase() === "PM") h += 12;
+  const year = yearStr ? parseInt(yearStr, 10) : new Date().getFullYear();
+  const d = new Date(year, mi, parseInt(dayStr, 10), h, parseInt(minStr, 10));
+  const start = d.getTime();
+  return { start, end: start + VISIT_MIN * 60_000, label: slot };
+}
+
+function slotsOverlap(a: string | null | undefined, b: string | null | undefined): boolean {
+  const pa = parseSlot(a); const pb = parseSlot(b);
+  if (!pa || !pb) return false;
+  return pa.start < pb.end && pb.start < pa.end;
+}
+
 type Props = {
   patient: Patient;
   providers: PickedProvider[];
@@ -699,6 +724,21 @@ export function BatchCallSimulator({ patient, providers, preferences, onReset, o
 
 
   function confirmBooking(i: number) {
+    const target = calls[i];
+    const targetSlot = target.outcome?.kind === "offered" ? (target.outcome as { slot: string }).slot : null;
+    const conflict = calls.find(
+      (c, idx) =>
+        idx !== i &&
+        c.decision === "accepted" &&
+        c.outcome?.kind === "offered" &&
+        slotsOverlap(targetSlot, (c.outcome as { slot: string }).slot),
+    );
+    if (conflict) {
+      toast.error(
+        `Time conflict with ${conflict.provider.name} (${(conflict.outcome as { slot: string }).slot}). Recall this office for a different time.`,
+      );
+      return;
+    }
     setConfirmedIdx(i);
     setCalls((prev) => prev.map((c, idx) => (idx === i ? { ...c, decision: "accepted" } : c)));
     toast.success(`Appointment confirmed with ${calls[i].provider.name}`);
@@ -925,6 +965,25 @@ function FinalReport({
   const cancelled = calls.filter((c) => c.decision === "cancelled");
   const noAvail = calls.filter((c) => c.outcome?.kind === "no_availability");
 
+  // Detect time-of-day conflicts across offered (non-cancelled) slots.
+  const conflictsByIdx = new Map<number, string[]>();
+  const liveOffers = calls
+    .map((c, idx) => ({ c, idx }))
+    .filter(
+      ({ c }) => c.outcome?.kind === "offered" && c.decision !== "cancelled" && c.decision !== "rejected",
+    );
+  for (let a = 0; a < liveOffers.length; a++) {
+    for (let b = a + 1; b < liveOffers.length; b++) {
+      const sa = (liveOffers[a].c.outcome as { slot: string }).slot;
+      const sb = (liveOffers[b].c.outcome as { slot: string }).slot;
+      if (slotsOverlap(sa, sb)) {
+        const ia = liveOffers[a].idx, ib = liveOffers[b].idx;
+        conflictsByIdx.set(ia, [...(conflictsByIdx.get(ia) ?? []), liveOffers[b].c.provider.name]);
+        conflictsByIdx.set(ib, [...(conflictsByIdx.get(ib) ?? []), liveOffers[a].c.provider.name]);
+      }
+    }
+  }
+
   return (
     <div className="border-t-2 border-border bg-muted/40 p-4">
       <div className="mb-3 flex items-center gap-2">
@@ -1014,6 +1073,12 @@ function FinalReport({
                   )}
                 </div>
 
+                {(conflictsByIdx.get(i)?.length ?? 0) > 0 && c.decision !== "cancelled" && c.decision !== "rejected" && (
+                  <div className="mt-1 inline-flex items-center gap-1 rounded border border-red-500/60 bg-red-50/60 px-2 py-0.5 text-[11px] font-medium text-red-700 dark:bg-red-950/30 dark:text-red-300">
+                    ⚠ Time conflict with {conflictsByIdx.get(i)!.join(", ")} — recall one office to reschedule
+                  </div>
+                )}
+
                 {isOffered && c.decision !== "cancelled" && (() => {
                   const prep = ((c.outcome as any)?.prep ?? []) as Array<{
                     text: string;
@@ -1055,7 +1120,17 @@ function FinalReport({
 
               <div className="flex flex-wrap gap-2">
                 {isOffered && c.decision !== "accepted" && c.decision !== "cancelled" && (
-                  <Button size="sm" onClick={() => onAccept(i)}>
+                  <Button
+                    size="sm"
+                    onClick={() => onAccept(i)}
+                    disabled={calls.some(
+                      (oc, oi) =>
+                        oi !== i &&
+                        oc.decision === "accepted" &&
+                        oc.outcome?.kind === "offered" &&
+                        slotsOverlap(slot, (oc.outcome as { slot: string }).slot),
+                    )}
+                  >
                     Time's good — accept
                   </Button>
                 )}
