@@ -7,9 +7,10 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Stethoscope, Inbox, LayoutDashboard, Mic } from "lucide-react";
+import { Stethoscope, Inbox, LayoutDashboard } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { ReactNode } from "react";
+import avatarAsset from "@/assets/wellator-avatar.png.asset.json";
 
 function NavLink({
   to,
