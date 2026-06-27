@@ -166,7 +166,8 @@ export const generateBookingDialog = createServerFn({ method: "POST" })
     const system = `You generate realistic short phone-call transcripts between Mara (an AI care navigator calling on behalf of a patient) and a receptionist at a doctor's office. Output ONLY valid JSON matching: {"turns":[{"speaker":"mara"|"office","text":"..."}], "outcome": {"kind":"offered","slot":"...","prep":[{"text":"...","category":"bring"|"pcp_send"|"lab"|"imaging"|"cardiac"|"in_office"|"other","bookable":true|false}]} | {"kind":"voicemail"} | {"kind":"no_availability"}}. 6-12 turns. Natural, concise spoken lines (1-2 sentences each).
 
 CRITICAL FACT-USE RULES — do NOT invent or alter patient facts:
-- Use the patient name, referring primary care doctor, insurance payer, plan, and member id EXACTLY as given in the user message. Copy them verbatim — never substitute other doctor names, payers (Aetna/BCBS/UHC/Medicare/etc.), or plan names.
+- Use the patient name, referring primary care doctor, insurance payer, and plan EXACTLY as given in the user message. Copy them verbatim — never substitute other doctor names, payers (Aetna/BCBS/UHC/Medicare/etc.), or plan names.
+- Do NOT mention any insurance member ID, group number, or policy number. Mara only gives the insurance payer and plan name.
 - For this demo, every patient has referral and insurance information on the profile. Mara must NEVER say self-referred, no referrer, no insurance, or insurance not on file anywhere in the transcript.
 - Mara's FIRST turn MUST use the prebuilt OPENING_LINE provided in the user message verbatim. You may append one short sentence requesting the appointment, but do not change the patient/PCP/insurance wording.
 
@@ -176,10 +177,9 @@ When the office OFFERS a slot, BEFORE the call wraps Mara must ask: "Is there an
 
     const payer = insurance?.payer ?? null;
     const plan = insurance?.plan ?? null;
-    const memberId = insurance?.member_id ?? null;
     const referralReq = insurance?.referral_required ? " Referral is required under this plan." : "";
     const insLine = payer
-      ? `Insurance: ${payer}${plan ? ` — ${plan}` : ""}${memberId ? ` (member ${memberId})` : ""}${insurance?.referral_required ? " — referral required" : ""}`
+      ? `Insurance: ${payer}${plan ? ` — ${plan}` : ""}${insurance?.referral_required ? " — referral required" : ""}`
       : "Insurance: on file in demo profile; verify details in chart";
     const refLine = referringDoctor
       ? `Referred by: ${referringDoctor}`
@@ -190,7 +190,7 @@ When the office OFFERS a slot, BEFORE the call wraps Mara must ask: "Is there an
       referringDoctor
         ? `${firstName} was referred by ${referringDoctor}`
         : `${firstName} has a primary care referral on file in the demo profile`
-    }, and ${firstName}'s insurance is ${payer ?? "on file in the demo profile"}${plan ? ` (${plan})` : ""}${memberId ? `, member ID ${memberId}` : ""}.${referralReq}`;
+    }, and ${firstName}'s insurance is ${payer ?? "on file in the demo profile"}${plan ? ` (${plan})` : ""}.${referralReq}`;
     const openingLine = `Hi, this is Mara, an AI care navigator calling on behalf of ${data.patient_name}. ${patientFactLine}`;
     const callbackOpeningLine = `Hi, this is Mara, an AI care navigator calling back on behalf of ${data.patient_name}. ${patientFactLine} The patient asked me to reschedule the previously offered appointment${data.previous_slot ? ` (${data.previous_slot})` : ""} because ${data.recall_reason ?? "the time did not work"}. Could we look for a different ${data.recall_reason && /(day|date|weekday)/i.test(data.recall_reason) ? "day" : "time"}?`;
     const canonicalOpeningLine = data.recall_reason ? callbackOpeningLine : openingLine;

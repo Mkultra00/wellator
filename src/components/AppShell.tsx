@@ -100,7 +100,7 @@ export function AppShell({ children }: { children: ReactNode }) {
                           <span className="text-xs text-muted-foreground">
                             🛡️ {p.insurance.payer}
                             {p.insurance.plan ? ` · ${p.insurance.plan}` : ""}
-                            {p.insurance.member_id ? ` · #${p.insurance.member_id}` : ""}
+                            {p.insurance.referral_required ? " · referral required" : ""}
                           </span>
                         )}
                       </div>
@@ -121,7 +121,6 @@ export function AppShell({ children }: { children: ReactNode }) {
                   <span>
                     🛡️ {patient.insurance.payer}
                     {patient.insurance.plan ? ` · ${patient.insurance.plan}` : ""}
-                    {patient.insurance.member_id ? ` · Member #${patient.insurance.member_id}` : ""}
                     {patient.insurance.referral_required ? " · referral required" : ""}
                   </span>
                 )}
