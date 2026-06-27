@@ -221,7 +221,7 @@ OPENING_LINE (Mara's first turn must use this verbatim, then optionally add one 
           },
           {
             speaker: "office" as const,
-            text: `Thanks for calling. Our scheduling system is briefly unavailable — I'll take a message for ${data.provider_name}'s team and have them call back.`,
+            text: `You've reached ${data.provider_name}'s office — please leave a message and we'll return your call.`,
           },
         ],
         outcome: { kind: "voicemail" as const },
