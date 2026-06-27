@@ -99,7 +99,7 @@ export async function runTool(
       const { data, error } = await db
         .from("patients")
         .select(
-          "id,full_name,preferred_language,accessibility_notes,primary_provider:providers!patients_primary_provider_id_fkey(name,specialty,clinic_address),insurance_profiles(payer,plan,member_id,group_id,referral_required)",
+          "id,full_name,preferred_language,accessibility_notes,primary_provider:providers!patients_primary_provider_id_fkey(name,specialty,clinic_address),insurance_profiles(payer,plan,referral_required)",
         )
         .eq("id", patient_id)
         .maybeSingle();
