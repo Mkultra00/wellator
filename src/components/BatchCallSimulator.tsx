@@ -128,6 +128,8 @@ export function BatchCallSimulator({ patient, providers, preferences, onReset, o
           provider_name: provider.name,
           provider_specialty: provider.specialty,
           provider_location: provider.location,
+          referring_doctor: ctx?.referring_doctor ?? null,
+          insurance: ctx?.insurance ?? null,
           preferences: {
             preferred_locations: preferences.preferred_locations,
             days: preferences.days,
