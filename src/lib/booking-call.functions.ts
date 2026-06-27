@@ -114,7 +114,6 @@ export type PrepItem = {
 };
 export type DialogOutcome =
   | { kind: "offered"; slot: string; prep?: PrepItem[] }
-  | { kind: "voicemail" }
   | { kind: "no_availability" };
 
 function stableHash(value: string) {
