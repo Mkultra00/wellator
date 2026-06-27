@@ -53,8 +53,8 @@ const CARDS: CardDef[] = [
   },
   {
     id: "billing_explainer",
-    title: "Talk with Mara",
-    body: "Chat with Mara about billing, appointments, or procedures — ask anything, in plain language.",
+    title: "Talk to Marie",
+    body: "Chat with Marie about billing, insurance, appointments, or procedures — ask anything, in plain language.",
     Icon: FileText,
 
   },
