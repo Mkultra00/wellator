@@ -273,7 +273,7 @@ export function BatchCallSimulator({ patient, providers, preferences, onReset, o
         },
         {
           speaker: "mara",
-          text: `Please check for ${prefTime} on ${preferences.days.join(", ") || "any weekday"}, within ${preferences.max_distance_miles} miles.`,
+          text: `Please check for ${prefTime} on ${preferences.days.join(", ") || "any weekday"}.`,
         },
         {
           speaker: "office",
