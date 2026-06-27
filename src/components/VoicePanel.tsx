@@ -330,7 +330,7 @@ function VoicePanelInner({ patient, scenario, context, onClose }: Props) {
           {isConnected && (
             <div className="flex items-center gap-1 rounded-md bg-background px-3 py-2 text-sm text-muted-foreground">
               {isSpeaking ? <Mic className="h-4 w-4 text-primary" /> : <MicOff className="h-4 w-4" />}
-              {isSpeaking ? "Mara is speaking" : "Listening"}
+              {isSpeaking ? `${scenario === "billing_explainer" ? "Marie" : "Mara"} is speaking` : "Listening"}
             </div>
           )}
           {scenario === "billing_explainer" && (
