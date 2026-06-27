@@ -109,6 +109,44 @@ function collectBookedSlots(callList: CallState[]) {
     .filter(Boolean);
 }
 
+function exactTimeForPreference(value: string | undefined, seed: number) {
+  const morning = ["8:45 AM", "9:30 AM", "10:15 AM", "11:15 AM"];
+  const midday = ["12:00 PM", "12:45 PM", "1:15 PM"];
+  const afternoon = ["1:45 PM", "2:30 PM", "3:15 PM", "4:00 PM"];
+  const evening = ["4:15 PM", "4:45 PM"];
+  const v = value?.toLowerCase() ?? "morning";
+  const pool = v.includes("evening")
+    ? evening
+    : v.includes("afternoon")
+      ? afternoon
+      : v.includes("midday") || v.includes("noon")
+        ? midday
+        : morning;
+  return pool[seed % pool.length];
+}
+
+function localFallbackSlot(providerName: string, prefs: BookingPrefs, busySlots: string[] = []) {
+  let h = 0;
+  for (let i = 0; i < providerName.length; i++) h = Math.abs((h * 31 + providerName.charCodeAt(i)) | 0);
+  const days = prefs.days.length ? prefs.days : ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"];
+  const timePrefs = prefs.time_of_day.length ? prefs.time_of_day : ["morning", "afternoon"];
+  const exactTimes = [
+    ...timePrefs.map((t, idx) => exactTimeForPreference(t, h + idx)),
+    "8:15 AM", "9:00 AM", "10:45 AM", "11:30 AM", "1:00 PM", "2:15 PM", "3:45 PM", "4:30 PM",
+  ];
+  const rotatedDays = [...days.slice(h % days.length), ...days.slice(0, h % days.length)];
+  for (let d = 0; d < rotatedDays.length; d++) {
+    for (let weekOffset = 0; weekOffset < 4; weekOffset++) {
+      for (const time of exactTimes) {
+        const dayNum = 8 + ((h + d * 4 + weekOffset * 6) % 20);
+        const slot = `${rotatedDays[d]}, July ${dayNum} at ${time}`;
+        if (!busySlots.some((busy) => slotsOverlap(slot, busy))) return slot;
+      }
+    }
+  }
+  return `${rotatedDays[0]}, July ${8 + (h % 20)} at ${exactTimes[0]}`;
+}
+
 type Props = {
   patient: Patient;
   providers: PickedProvider[];
@@ -300,7 +338,7 @@ export function BatchCallSimulator({ patient, providers, preferences, onReset, o
 
   type PreparedDialog = Awaited<ReturnType<typeof genDialog>>;
 
-  function fallbackDialog(provider: PickedProvider, reason: string): PreparedDialog {
+  function fallbackDialog(provider: PickedProvider, reason: string, busySlots: string[] = []): PreparedDialog {
     const firstName = patient.full_name.split(" ")[0];
     const insurance = bookingContext.insurance;
     const insuranceLine = insurance?.payer
@@ -308,8 +346,7 @@ export function BatchCallSimulator({ patient, providers, preferences, onReset, o
       : "insurance on file";
     const referrer = bookingContext.referring_doctor ?? "the primary care provider on file";
     const prefTime = preferences.time_of_day.length ? preferences.time_of_day.join(" or ") : "any time";
-    const day = preferences.days[0] || "Tuesday";
-    const slot = `${day}, July 16 at ${prefTime === "any time" ? "10:15 AM" : prefTime}`;
+    const slot = localFallbackSlot(provider.name, preferences, busySlots);
     return {
       turns: [
         {
@@ -382,7 +419,7 @@ export function BatchCallSimulator({ patient, providers, preferences, onReset, o
         }),
         new Promise<PreparedDialog>((resolve) =>
           window.setTimeout(
-            () => resolve(fallbackDialog(provider, "dialog generation timeout")),
+              () => resolve(fallbackDialog(provider, "dialog generation timeout", opts?.busy_slots ?? [])),
             DIALOG_TIMEOUT_MS,
           ),
         ),
@@ -391,7 +428,7 @@ export function BatchCallSimulator({ patient, providers, preferences, onReset, o
       toast.warning(`Using transcript-only fallback for ${provider.name}`, {
         description: e instanceof Error ? e.message : "Dialog generation failed",
       });
-      return fallbackDialog(provider, e instanceof Error ? e.message : "dialog generation failed");
+      return fallbackDialog(provider, e instanceof Error ? e.message : "dialog generation failed", opts?.busy_slots ?? []);
     }
   }
 
@@ -458,6 +495,17 @@ export function BatchCallSimulator({ patient, providers, preferences, onReset, o
         ),
       );
       return;
+    }
+    if (dialog.outcome.kind === "offered" && opts?.busy_slots?.length) {
+      const offeredSlot = (dialog.outcome as { slot: string }).slot;
+      const conflictWith = opts.busy_slots.find((busy) => slotsOverlap(offeredSlot, busy));
+      if (conflictWith) {
+        dialog = await prepareDialog(provider, {
+          ...opts,
+          recall_reason: `the offered time ${offeredSlot} conflicts with ${conflictWith}; please give a different day or a time at least one hour away`,
+          previous_slot: offeredSlot,
+        });
+      }
     }
     await playDialog(idx, provider, dialog);
   }
