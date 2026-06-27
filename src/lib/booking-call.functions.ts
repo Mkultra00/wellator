@@ -195,7 +195,7 @@ function nextSlot(
   }
   return `${rotatedDays[0]}, July ${7 + offset} at ${baseTime}`;
 }
-function ensureMaraClosing(turns: { speaker: "mara" | "office" | "patient"; text: string }[]): { speaker: "mara" | "office" | "patient"; text: string }[] {
+function ensureMaraClosing<T extends { speaker: string; text: string }>(turns: T[]): T[] {
   if (turns.length === 0) return turns;
   const last = turns[turns.length - 1];
   const hasThanks = /thank/i.test(last.text);
@@ -209,14 +209,15 @@ function ensureMaraClosing(turns: { speaker: "mara" | "office" | "patient"; text
         : " Thank you so much. Goodbye, and take care!";
     return [
       ...turns.slice(0, -1),
-      { ...last, text: last.text.trim() + closing },
+      { ...last, text: last.text.trim() + closing } as T,
     ];
   }
   return [
     ...turns,
-    { speaker: "mara", text: "Thank you so much for your time today. Goodbye, and take care!" },
+    { speaker: "mara", text: "Thank you so much for your time today. Goodbye, and take care!" } as T,
   ];
 }
+
 
 function prepForSpecialty(specialty: string): PrepItem[] {
   const s = specialty.toLowerCase();
