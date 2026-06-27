@@ -31,7 +31,7 @@ import {
   type DialogTurn,
   type DialogOutcome,
 } from "@/lib/booking-call.functions";
-import { getBookingContext, saveBookingCall } from "@/lib/data.functions";
+import { getBookingContext, saveBookingCall, listReferralNetwork } from "@/lib/data.functions";
 import type { PickedProvider } from "./ProviderPicker";
 import type { BookingPrefs } from "./BookingPreferences";
 import type { Patient } from "@/lib/patient-context";
@@ -45,7 +45,11 @@ type CallState = {
   revealed: number; // how many turns shown so far
   outcome?: DialogOutcome;
   decision?: "accepted" | "rejected" | "cancelled";
+  recall_reason?: string;
+  origin?: "initial" | "alternative" | "callback";
+  replaces_provider_id?: string;
 };
+
 
 function scoreOutcome(o: DialogOutcome | undefined, prefs: BookingPrefs, provider: PickedProvider) {
   if (!o || o.kind !== "offered") return -1;
