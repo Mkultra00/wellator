@@ -73,6 +73,33 @@ export const getPatientVoiceContext = createServerFn({ method: "GET" })
     const insurance_summary = insurance?.payer
       ? `${insurance.payer}${insurance.plan ? ` — ${insurance.plan}` : ""}${insurance.referral_required ? ", referral required" : ""}`
       : "insurance on file in demo profile";
+    // Pull booked appointments saved by the BatchCallSimulator (call_logs.scenario='booking_call').
+    const { data: logs } = await db
+      .from("call_logs")
+      .select("id,started_at,outcome")
+      .eq("patient_id", data.patient_id)
+      .eq("scenario", "booking_call")
+      .order("started_at", { ascending: false })
+      .limit(50);
+    const appointments = (logs ?? [])
+      .map((row: any) => {
+        let parsed: any = {};
+        try { parsed = row.outcome ? JSON.parse(row.outcome) : {}; } catch { return null; }
+        if (parsed.status !== "booked") return null;
+        return {
+          slot: parsed.slot ?? null,
+          provider_name: parsed.provider_name ?? null,
+          provider_specialty: parsed.provider_specialty ?? null,
+          provider_location: parsed.provider_location ?? null,
+        };
+      })
+      .filter(Boolean) as Array<{ slot: string|null; provider_name: string|null; provider_specialty: string|null; provider_location: string|null }>;
+    const appointments_summary = appointments.length
+      ? appointments
+          .map((a) => `${a.slot ?? "TBD"} with ${a.provider_name ?? "provider"}${a.provider_specialty ? ` (${a.provider_specialty})` : ""}${a.provider_location ? ` at ${a.provider_location}` : ""}`)
+          .join("; ")
+      : "no upcoming appointments booked yet in this session";
+
     return {
       patient_name: (p as any).full_name,
       preferred_language: (p as any).preferred_language,
@@ -81,6 +108,8 @@ export const getPatientVoiceContext = createServerFn({ method: "GET" })
       insurance,
       primary_provider_summary,
       insurance_summary,
+      appointments,
+      appointments_summary,
     };
   });
 

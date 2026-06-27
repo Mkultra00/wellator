@@ -206,7 +206,8 @@ function VoicePanelInner({ patient, scenario, context, onClose }: Props) {
       });
 
       // Inject context after connect (works without overrides allow-listing).
-      const contextMsg = `Patient: ${patient.full_name}. Primary care provider on file: ${primaryProvider}. Insurance on file: ${insuranceSummary}. Scenario: ${SCENARIO_LABEL[scenario]}. ${opener}`;
+      const appointmentsSummary = (voiceContext as any).appointments_summary as string;
+      const contextMsg = `Patient: ${patient.full_name}. Primary care provider on file: ${primaryProvider}. Insurance on file: ${insuranceSummary}. Upcoming appointments booked in this app: ${appointmentsSummary}. You can also call the get_appointments tool any time to refresh that list. Scenario: ${SCENARIO_LABEL[scenario]}. ${opener}`;
       setTimeout(() => {
         try {
           conversation.sendContextualUpdate?.(contextMsg);
