@@ -138,8 +138,8 @@ export function ProviderPicker({ selectedIds, onChange, onConfirm }: Props) {
         <div>
           <h2 className="text-lg font-semibold">Pick the offices Mara should call</h2>
           <p className="text-sm text-muted-foreground">
-            Your primary doctor's referral network. Select every office you'd be willing to see —
-            Mara batch-calls them and books the best match for your preferences.
+            Your primary doctor's referral network. Select every specialist office you'd be willing to
+            see — Mara batch-calls them and books the best match for your preferences.
           </p>
           {data?.patient_address && (
             <p className="mt-1 flex items-center gap-1 text-xs text-muted-foreground">
