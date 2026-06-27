@@ -620,7 +620,7 @@ export const generatePatientConfirmDialog = createServerFn({ method: "POST" })
       throw new Error("Bad JSON from model");
     }
     return {
-      turns: Array.isArray(parsed.turns) ? parsed.turns : [],
+      turns: ensureMaraClosing(Array.isArray(parsed.turns) ? parsed.turns : []),
       outcome: parsed.outcome ?? { accepted_provider_ids: [], declined_provider_ids: [] },
       mara_voice_id: MARA_VOICE,
       patient_voice_id: pickPatientVoice(data.patient_name),
