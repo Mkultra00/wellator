@@ -965,6 +965,25 @@ function FinalReport({
   const cancelled = calls.filter((c) => c.decision === "cancelled");
   const noAvail = calls.filter((c) => c.outcome?.kind === "no_availability");
 
+  // Detect time-of-day conflicts across offered (non-cancelled) slots.
+  const conflictsByIdx = new Map<number, string[]>();
+  const liveOffers = calls
+    .map((c, idx) => ({ c, idx }))
+    .filter(
+      ({ c }) => c.outcome?.kind === "offered" && c.decision !== "cancelled" && c.decision !== "rejected",
+    );
+  for (let a = 0; a < liveOffers.length; a++) {
+    for (let b = a + 1; b < liveOffers.length; b++) {
+      const sa = (liveOffers[a].c.outcome as { slot: string }).slot;
+      const sb = (liveOffers[b].c.outcome as { slot: string }).slot;
+      if (slotsOverlap(sa, sb)) {
+        const ia = liveOffers[a].idx, ib = liveOffers[b].idx;
+        conflictsByIdx.set(ia, [...(conflictsByIdx.get(ia) ?? []), liveOffers[b].c.provider.name]);
+        conflictsByIdx.set(ib, [...(conflictsByIdx.get(ib) ?? []), liveOffers[a].c.provider.name]);
+      }
+    }
+  }
+
   return (
     <div className="border-t-2 border-border bg-muted/40 p-4">
       <div className="mb-3 flex items-center gap-2">
