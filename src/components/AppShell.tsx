@@ -51,7 +51,7 @@ export function AppShell({ children }: { children: ReactNode }) {
               <Mic className="h-5 w-5" />
             </div>
             <div className="leading-tight">
-              <div className="text-base font-semibold text-foreground">Mara</div>
+              <div className="text-base font-semibold text-foreground">Wellator</div>
               <div className="text-xs text-muted-foreground">AI Care Navigator</div>
             </div>
           </Link>
