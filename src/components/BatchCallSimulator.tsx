@@ -14,7 +14,6 @@ import {
   Phone,
   CheckCircle2,
   XCircle,
-  Voicemail,
   ArrowLeft,
   ArrowRight,
   Trophy,
@@ -925,7 +924,6 @@ function FinalReport({
   const accepted = calls.filter((c) => c.decision === "accepted");
   const cancelled = calls.filter((c) => c.decision === "cancelled");
   const noAvail = calls.filter((c) => c.outcome?.kind === "no_availability");
-  const vm = calls.filter((c) => c.outcome?.kind === "voicemail");
 
   return (
     <div className="border-t-2 border-border bg-muted/40 p-4">
@@ -963,7 +961,7 @@ function FinalReport({
         <Stat label="Slots offered" value={offered.length} />
         <Stat label="Accepted" value={accepted.length} tone="emerald" />
         <Stat label="No availability" value={noAvail.length} tone="destructive" />
-        <Stat label="Voicemail" value={vm.length} tone="amber" />
+        <Stat label="Completed live" value={offered.length + noAvail.length} tone="amber" />
       </div>
 
       <div className="space-y-2">
@@ -1010,9 +1008,7 @@ function FinalReport({
                         ? "🚫 Patient declined this doctor — finding alternative"
                         : isOffered
                           ? `Offered ${slot}`
-                          : c.outcome?.kind === "voicemail"
-                            ? "Left voicemail — no live response"
-                            : "No availability"}
+                          : "No availability"}
                   {c.recall_reason && c.decision !== "rejected" && (
                     <span className="ml-1 italic">· recalled: {c.recall_reason}</span>
                   )}
@@ -1226,7 +1222,6 @@ function StatusIcon({
 }) {
   if (status === "live" || isActive) return <Loader2 className="h-4 w-4 animate-spin text-primary" />;
   if (status === "queued") return <Phone className="h-4 w-4 text-muted-foreground" />;
-  if (outcome?.kind === "voicemail") return <Voicemail className="h-4 w-4 text-amber-600" />;
   if (outcome?.kind === "no_availability") return <XCircle className="h-4 w-4 text-destructive" />;
   return <CheckCircle2 className="h-4 w-4 text-emerald-600" />;
 }
@@ -1253,12 +1248,6 @@ function OutcomeBadge({
       </Badge>
     );
   if (!outcome) return null;
-  if (outcome.kind === "voicemail")
-    return (
-      <Badge variant="outline" className="border-amber-500 text-xs text-amber-700">
-        Voicemail
-      </Badge>
-    );
   if (outcome.kind === "no_availability")
     return (
       <Badge variant="outline" className="border-destructive text-xs text-destructive">
