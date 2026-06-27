@@ -185,7 +185,7 @@ function VoicePanelInner({ patient, scenario, context, onClose }: Props) {
         const prefLine = prefs
           ? ` The patient prefers ${Array.isArray(prefs.time_of_day) ? (prefs.time_of_day.length ? prefs.time_of_day.join(" or ") : "any time") : (prefs.time_of_day ?? "any time")} on ${(prefs.days ?? []).join(", ") || "any day"}${prefs.preferred_locations ? ` near ${prefs.preferred_locations}` : ""}${prefs.notes ? `. Notes: ${prefs.notes}` : ""}.`
           : "";
-        opener = `Hi, this is Mara, an AI care navigator calling on behalf of ${patient.full_name}. The referring primary care provider is ${primaryProvider}, and the insurance on file is ${insuranceSummary}. I have a batch of ${providers.length} offices to call to book a new appointment: ${list}.${prefLine} I'll work through them one at a time — starting with the first office now. Could you help me find the next available slot?`;
+        opener = `Hi there, this is Mara, an AI care navigator calling on behalf of ${patient.full_name}. The referring primary care provider is ${primaryProvider}, and the insurance on file is ${insuranceSummary}. I have a batch of ${providers.length} offices to call to book a new appointment: ${list}.${prefLine} I'll work through them one at a time — starting with the first office now. Could you please help me find the next available slot? Thank you so much.`;
       }
       const useOverrides = scenario === "new_booking";
       await conversation.startSession({
