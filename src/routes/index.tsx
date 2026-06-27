@@ -128,9 +128,9 @@ function Index() {
                   )}
                 >
                   <div className="p-6">
-                    <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-primary/10 text-primary">
-                      <Icon className="h-6 w-6" />
-                    </div>
+                  <div className="flex h-20 w-20 items-center justify-center rounded-2xl bg-gradient-to-br from-primary/15 via-accent/10 to-secondary/15 shadow-sm">
+                    <Icon className="h-16 w-16" />
+                  </div>
                     <h2 className="mt-4 text-xl font-semibold text-foreground">{c.title}</h2>
                     <p className="mt-2 text-sm text-muted-foreground">{c.body}</p>
                     <div className="mt-4 flex items-center gap-1 text-sm font-medium text-primary opacity-0 transition-opacity group-hover:opacity-100">
