@@ -1,166 +1,275 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import { AppShell } from "@/components/AppShell";
-import { VoicePanel, type Scenario } from "@/components/VoicePanel";
-import { usePatient } from "@/lib/patient-context";
-import { listScheduledCalls, updateScheduledCallStatus } from "@/lib/data.functions";
+import { listCallLogs } from "@/lib/data.functions";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Phone, Clock, CheckCircle2, X } from "lucide-react";
+import { cn } from "@/lib/utils";
+import {
+  Phone,
+  CheckCircle2,
+  Voicemail,
+  XCircle,
+  AlertCircle,
+  ChevronDown,
+  ChevronRight,
+  Mail,
+  UserRound,
+} from "lucide-react";
 import { formatDistanceToNowStrict } from "date-fns";
-
 
 export const Route = createFileRoute("/inbox")({
   head: () => ({
     meta: [
-      { title: "Scheduled calls — Mara" },
+      { title: "Call inbox — Mara" },
       {
         name: "description",
         content:
-          "Mocked outbound call inbox. Demonstrates how Mara would reach patients for reminders, PT follow-ups, and billing check-ins.",
+          "Every call Mara made or received — who she spoke with, the full transcript, and whether the appointment was booked, needs follow-up, or had no availability.",
       },
     ],
   }),
   component: InboxPage,
 });
 
-type Scheduled = {
+type Turn = { speaker: "mara" | "office" | "patient"; who?: string; text: string };
+
+type OutcomeInfo = {
+  kind?: string;
+  status?: string;
+  slot?: string | null;
+  provider_id?: string;
+  provider_name?: string;
+  provider_specialty?: string;
+  provider_location?: string;
+  accepted_provider_ids?: string[];
+  declined_provider_ids?: string[];
+  offers?: Array<{
+    provider_name: string;
+    specialty: string;
+    slot: string;
+    location: string;
+  }>;
+  email?: { to: string; subject: string; body: string };
+};
+
+type CallLog = {
   id: string;
-  patient_id: string;
-  scenario: "reminder" | "pt_followup" | "billing_checkin";
-  context: Record<string, unknown>;
-  due_at: string;
-  status: "pending" | "completed" | "skipped";
+  patient_id: string | null;
+  scenario: string;
+  started_at: string;
+  ended_at: string | null;
+  transcript: unknown;
+  outcome: string | null;
   patients?: { full_name: string } | null;
 };
 
-const SCENARIO_TO_VOICE: Record<Scheduled["scenario"], Scenario> = {
-  reminder: "reminder",
-  pt_followup: "pt_followup",
-  billing_checkin: "billing_explainer",
+const STATUS_META: Record<
+  string,
+  { label: string; tone: string; icon: typeof CheckCircle2 }
+> = {
+  booked: { label: "Booked", tone: "border-emerald-500 text-emerald-700", icon: CheckCircle2 },
+  confirmed: { label: "Confirmed by patient", tone: "border-emerald-500 text-emerald-700", icon: CheckCircle2 },
+  needs_more_info: {
+    label: "Needs additional information",
+    tone: "border-amber-500 text-amber-700",
+    icon: AlertCircle,
+  },
+  no_availability: {
+    label: "No availability",
+    tone: "border-destructive text-destructive",
+    icon: XCircle,
+  },
 };
 
-const SCENARIO_LABEL: Record<Scheduled["scenario"], string> = {
-  reminder: "Appointment reminder",
-  pt_followup: "PT follow-up",
-  billing_checkin: "Billing check-in",
-};
+function parseOutcome(raw: string | null): OutcomeInfo {
+  if (!raw) return {};
+  try {
+    return JSON.parse(raw) as OutcomeInfo;
+  } catch {
+    return { status: raw };
+  }
+}
+
+function callerLabel(log: CallLog, outcome: OutcomeInfo): string {
+  const patient = log.patients?.full_name ?? "Patient";
+  if (log.scenario === "patient_confirmation") {
+    return `Mara → ${patient}`;
+  }
+  if (outcome.provider_name) {
+    return `Mara → ${outcome.provider_name}'s office (for ${patient})`;
+  }
+  return `Mara (for ${patient})`;
+}
 
 function InboxPage() {
-  const { patients, setPatientId, patient } = usePatient();
-  const [active, setActive] = useState<Scheduled | null>(null);
-  const qc = useQueryClient();
-  const fetchScheduled = useServerFn(listScheduledCalls);
-  const updateStatus = useServerFn(updateScheduledCallStatus);
-
+  const fetchLogs = useServerFn(listCallLogs);
   const { data, isLoading } = useQuery({
-    queryKey: ["scheduled_calls"],
-    queryFn: async () => (await fetchScheduled()) as Scheduled[],
+    queryKey: ["call_logs"],
+    queryFn: async () => (await fetchLogs()) as CallLog[],
   });
-
-  const answer = (call: Scheduled) => {
-    setPatientId(call.patient_id);
-    setActive(call);
-  };
-
-  const markDone = async (id: string) => {
-    await updateStatus({ data: { id, status: "completed" } });
-    qc.invalidateQueries({ queryKey: ["scheduled_calls"] });
-  };
-  const skip = async (id: string) => {
-    await updateStatus({ data: { id, status: "skipped" } });
-    qc.invalidateQueries({ queryKey: ["scheduled_calls"] });
-  };
-
-
-  const activePatient = active ? patients.find((p) => p.id === active.patient_id) ?? patient : null;
+  const [open, setOpen] = useState<Record<string, boolean>>({});
 
   return (
     <AppShell>
       <div className="space-y-6">
         <div>
-          <h1 className="text-2xl font-bold">Scheduled outbound calls</h1>
+          <h1 className="text-2xl font-bold">Call inbox</h1>
           <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
-            In production, Mara would dial these patients automatically. For the demo, press{" "}
-            <strong>Answer</strong> to simulate the patient picking up — same agent, same tools, same
-            transcript.
+            Every call Mara made — to doctor offices on a patient's behalf, and her follow-up
+            confirmation calls to the patient. Expand a row to read the full transcript.
           </p>
         </div>
 
         {isLoading ? (
           <div className="text-muted-foreground">Loading…</div>
+        ) : (data ?? []).length === 0 ? (
+          <Card className="p-8 text-center text-muted-foreground">
+            No calls yet. Book an appointment on the home page — every office call and patient
+            confirmation will land here with its transcript.
+          </Card>
         ) : (
           <div className="space-y-3">
-            {(data ?? []).map((c) => {
-              const isPast = new Date(c.due_at).getTime() < Date.now();
+            {(data ?? []).map((log) => {
+              const outcome = parseOutcome(log.outcome);
+              const status = outcome.status ?? "completed";
+              const meta = STATUS_META[status] ?? {
+                label: status,
+                tone: "border-border text-muted-foreground",
+                icon: Phone,
+              };
+              const Icon = meta.icon;
+              const turns = Array.isArray(log.transcript) ? (log.transcript as Turn[]) : [];
+              const isOpen = !!open[log.id];
+              const isPatientCall = log.scenario === "patient_confirmation";
+
               return (
-                <Card key={c.id} className="flex flex-wrap items-center gap-4 p-4">
-                  <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary/10 text-primary">
-                    <Phone className="h-5 w-5" />
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <span className="font-semibold">{c.patients?.full_name}</span>
-                      <Badge variant="outline">{SCENARIO_LABEL[c.scenario]}</Badge>
-                      <Badge
-                        variant={
-                          c.status === "completed"
-                            ? "default"
-                            : c.status === "skipped"
-                              ? "secondary"
-                              : "outline"
-                        }
-                      >
-                        {c.status}
-                      </Badge>
+                <Card key={log.id} className="overflow-hidden">
+                  <button
+                    type="button"
+                    onClick={() => setOpen((p) => ({ ...p, [log.id]: !p[log.id] }))}
+                    className="flex w-full items-start gap-3 p-4 text-left transition-colors hover:bg-accent/40"
+                  >
+                    <div
+                      className={cn(
+                        "flex h-10 w-10 shrink-0 items-center justify-center rounded-full",
+                        isPatientCall ? "bg-primary/10 text-primary" : "bg-muted",
+                      )}
+                    >
+                      {isPatientCall ? (
+                        <UserRound className="h-5 w-5" />
+                      ) : outcome.kind === "voicemail" ? (
+                        <Voicemail className="h-5 w-5 text-amber-600" />
+                      ) : (
+                        <Phone className="h-5 w-5" />
+                      )}
                     </div>
-                    <div className="mt-1 flex items-center gap-1 text-xs text-muted-foreground">
-                      <Clock className="h-3 w-3" />
-                      {isPast ? "Due" : "Scheduled"}{" "}
-                      {formatDistanceToNowStrict(new Date(c.due_at), { addSuffix: true })}
-                    </div>
-                    {Object.keys(c.context ?? {}).length > 0 && (
-                      <div className="mt-1 text-xs text-muted-foreground">
-                        Context: {JSON.stringify(c.context)}
+
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="font-semibold">{callerLabel(log, outcome)}</span>
+                        <Badge variant="outline" className={cn("gap-1 text-xs", meta.tone)}>
+                          <Icon className="h-3 w-3" /> {meta.label}
+                        </Badge>
+                        {outcome.slot && (
+                          <Badge variant="secondary" className="text-xs">
+                            {outcome.slot}
+                          </Badge>
+                        )}
                       </div>
+                      <div className="mt-1 text-xs text-muted-foreground">
+                        {outcome.provider_specialty && (
+                          <span>
+                            {outcome.provider_specialty}
+                            {outcome.provider_location ? ` · ${outcome.provider_location}` : ""}
+                            {" · "}
+                          </span>
+                        )}
+                        {formatDistanceToNowStrict(new Date(log.started_at), { addSuffix: true })}
+                        {turns.length > 0 && ` · ${turns.length} turns`}
+                      </div>
+                    </div>
+                    {isOpen ? (
+                      <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                    ) : (
+                      <ChevronRight className="h-4 w-4 text-muted-foreground" />
                     )}
-                  </div>
-                  {c.status === "pending" && (
-                    <div className="flex gap-2">
-                      <Button size="sm" onClick={() => answer(c)} className="gap-1">
-                        <Phone className="h-4 w-4" /> Answer
-                      </Button>
-                      <Button size="sm" variant="ghost" onClick={() => markDone(c.id)}>
-                        <CheckCircle2 className="h-4 w-4" />
-                      </Button>
-                      <Button size="sm" variant="ghost" onClick={() => skip(c.id)}>
-                        <X className="h-4 w-4" />
-                      </Button>
+                  </button>
+
+                  {isOpen && (
+                    <div className="border-t border-border bg-muted/30 p-4 space-y-3">
+                      {turns.length === 0 ? (
+                        <div className="text-sm text-muted-foreground">
+                          No transcript captured.
+                        </div>
+                      ) : (
+                        <div className="space-y-2">
+                          {turns.map((t, i) => (
+                            <div
+                              key={i}
+                              className={cn(
+                                "rounded px-2 py-1.5 text-sm",
+                                t.speaker === "mara" ? "bg-primary/10" : "bg-background",
+                              )}
+                            >
+                              <div className="mb-0.5 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+                                {t.who ?? t.speaker}
+                              </div>
+                              {t.text}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+
+                      {status === "needs_more_info" && (
+                        <div className="flex items-start gap-2 rounded-md border border-amber-500/40 bg-amber-50/40 p-3 text-sm dark:bg-amber-950/20">
+                          <AlertCircle className="mt-0.5 h-4 w-4 text-amber-600" />
+                          <div>
+                            <div className="font-medium">Needs additional information</div>
+                            <div className="text-xs text-muted-foreground">
+                              {outcome.kind === "voicemail"
+                                ? "Mara left a voicemail. Wait for a callback or re-run the call."
+                                : "The office couldn't commit to a slot. Try calling again or pick another doctor."}
+                            </div>
+                          </div>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            asChild
+                            className="ml-auto"
+                          >
+                            <a href="/">Call again</a>
+                          </Button>
+                        </div>
+                      )}
+
+                      {outcome.email && (
+                        <div className="rounded-md border border-border bg-background p-3">
+                          <div className="mb-1 flex items-center gap-2 text-xs uppercase tracking-wider text-muted-foreground">
+                            <Mail className="h-3.5 w-3.5" /> Confirmation email sent
+                          </div>
+                          <div className="text-xs text-muted-foreground">
+                            <span className="font-medium text-foreground">To:</span>{" "}
+                            {outcome.email.to}
+                          </div>
+                          <div className="text-xs text-muted-foreground">
+                            <span className="font-medium text-foreground">Subject:</span>{" "}
+                            {outcome.email.subject}
+                          </div>
+                          <pre className="mt-2 whitespace-pre-wrap rounded bg-muted p-2 text-xs">
+{outcome.email.body}
+                          </pre>
+                        </div>
+                      )}
                     </div>
                   )}
                 </Card>
               );
             })}
-            {(data ?? []).length === 0 && (
-              <Card className="p-8 text-center text-muted-foreground">No scheduled calls.</Card>
-            )}
           </div>
-        )}
-
-        {active && activePatient && (
-          <VoicePanel
-            key={active.id}
-            patient={activePatient}
-            scenario={SCENARIO_TO_VOICE[active.scenario]}
-            context={active.context}
-            onClose={() => {
-              markDone(active.id);
-              setActive(null);
-            }}
-          />
         )}
       </div>
     </AppShell>
