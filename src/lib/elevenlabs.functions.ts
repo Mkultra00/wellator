@@ -3,20 +3,20 @@ import { z } from "zod";
 
 /**
  * Mint a WebRTC conversation token for the requested ElevenLabs Agent variant.
- * - "wellator" (default): generic Wellator agent (booking/PT/billing fallback)
- * - "wellator_billing" (UI name: Wellator): billing/insurance Q&A agent
+ * - "mara" (default): generic Mara agent (booking/PT/billing fallback)
+ * - "mara_billing" (UI name: Mara): billing/insurance Q&A agent
  */
 export const getElevenLabsConversationToken = createServerFn({ method: "POST" })
   .inputValidator((d) =>
-    z.object({ variant: z.enum(["wellator", "wellator_billing"]).optional() }).optional().parse(d),
+    z.object({ variant: z.enum(["mara", "mara_billing"]).optional() }).optional().parse(d),
   )
   .handler(async ({ data }) => {
     const apiKey = process.env.ELEVENLABS_API_KEY;
     if (!apiKey) throw new Error("ELEVENLABS_API_KEY is not configured");
 
-    const variant = data?.variant ?? "wellator";
+    const variant = data?.variant ?? "mara";
     const agentId =
-      variant === "wellator_billing"
+      variant === "mara_billing"
         ? process.env.ELEVENLABS_MARIE_AGENT_ID
         : process.env.ELEVENLABS_AGENT_ID;
     if (!agentId) throw new Error(`ElevenLabs agent id for variant "${variant}" is not configured`);
@@ -36,7 +36,7 @@ export const getElevenLabsConversationToken = createServerFn({ method: "POST" })
   });
 
 /**
- * Vision/document analysis for an attachment shared during a Wellator chat.
+ * Vision/document analysis for an attachment shared during a Mara chat.
  * Uses Lovable AI Gateway (Gemini) to extract the key info from a bill,
  * insurance card, EOB, or appointment letter, so the live voice agent can
  * discuss it after we push the summary in via sendContextualUpdate.
@@ -62,7 +62,7 @@ export const analyzeAttachment = createServerFn({ method: "POST" })
     const content: Array<Record<string, unknown>> = [
       {
         type: "text",
-        text: `You are helping a voice agent named Wellator discuss a medical billing or insurance document with an elderly patient.
+        text: `You are helping a voice agent named Mara discuss a medical billing or insurance document with an elderly patient.
 
 The patient just attached: ${data.filename ?? "an attachment"} (${data.mime}).
 ${data.user_note ? `They added this note: "${data.user_note}"` : ""}

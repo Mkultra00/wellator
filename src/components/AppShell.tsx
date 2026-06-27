@@ -10,7 +10,7 @@ import {
 import { Stethoscope, Inbox, LayoutDashboard } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { ReactNode } from "react";
-import avatarAsset from "@/assets/wellator-avatar.png.asset.json";
+import avatarAsset from "@/assets/mara-avatar.png.asset.json";
 
 function NavLink({
   to,
@@ -56,7 +56,7 @@ export function AppShell({ children }: { children: ReactNode }) {
               height={72}
             />
             <div className="leading-tight">
-              <div className="text-3xl font-semibold text-foreground">Wellator</div>
+              <div className="text-3xl font-semibold text-foreground">Mara</div>
               <div className="text-sm text-muted-foreground">AI Care Navigator</div>
             </div>
           </Link>

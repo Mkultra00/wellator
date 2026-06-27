@@ -15,16 +15,16 @@ import { cn } from "@/lib/utils";
 export const Route = createFileRoute("/")({
   head: () => ({
     meta: [
-      { title: "Wellator — AI Care Navigator" },
+      { title: "Mara — AI Care Navigator" },
       {
         name: "description",
         content:
           "Voice-first AI care coordinator that books appointments, follows up after visits, and explains bills in plain language.",
       },
-      { property: "og:title", content: "Wellator — AI Care Navigator" },
+      { property: "og:title", content: "Mara — AI Care Navigator" },
       {
         property: "og:description",
-        content: "Talk to Wellator to book a visit, follow up after a treatment, or get help with a bill.",
+        content: "Talk to Mara to book a visit, follow up after a treatment, or get help with a bill.",
       },
     ],
   }),
@@ -42,7 +42,7 @@ const CARDS: CardDef[] = [
   {
     id: "new_booking",
     title: "Book an appointment",
-    body: "Pick every doctor you'd be willing to see — Wellator batch-calls each office, compares availability against your preferences, and books the best match.",
+    body: "Pick every doctor you'd be willing to see — Mara batch-calls each office, compares availability against your preferences, and books the best match.",
     Icon: CalendarPlus,
   },
   {
@@ -53,8 +53,8 @@ const CARDS: CardDef[] = [
   },
   {
     id: "billing_explainer",
-    title: "Talk to Wellator",
-    body: "Chat with Wellator about billing, insurance, appointments, or procedures — ask anything, in plain language.",
+    title: "Talk to Mara",
+    body: "Chat with Mara about billing, insurance, appointments, or procedures — ask anything, in plain language.",
     Icon: FileText,
 
   },
@@ -109,7 +109,7 @@ function Index() {
               Hi {patient.full_name.split(" ")[0]}, how can I help today?
             </h1>
             <p className="mt-2 max-w-2xl text-base text-muted-foreground">
-              Tap one of the options below and I'll start a voice call with Wellator. She'll listen, ask
+              Tap one of the options below and I'll start a voice call with Mara. She'll listen, ask
               questions, and take care of the paperwork side for you.
               {patient.persona_note && (
                 <span className="mt-2 block text-xs italic text-muted-foreground/80">
