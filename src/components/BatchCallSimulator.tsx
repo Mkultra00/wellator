@@ -28,6 +28,7 @@ import {
   type DialogTurn,
   type DialogOutcome,
 } from "@/lib/booking-call.functions";
+import { getBookingContext } from "@/lib/data.functions";
 import type { PickedProvider } from "./ProviderPicker";
 import type { BookingPrefs } from "./BookingPreferences";
 import type { Patient } from "@/lib/patient-context";
@@ -69,9 +70,17 @@ export function BatchCallSimulator({ patient, providers, preferences, onReset, o
   const [confirmedIdx, setConfirmedIdx] = useState<number | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const cancelRef = useRef(false);
+  const [ctx, setCtx] = useState<{ referring_doctor: string | null; insurance: any } | null>(null);
 
   const genDialog = useServerFn(generateBookingDialog);
   const tts = useServerFn(synthesizeVoice);
+  const fetchCtx = useServerFn(getBookingContext);
+
+  useEffect(() => {
+    fetchCtx({ data: { patient_id: patient.id } })
+      .then((r) => setCtx(r))
+      .catch(() => setCtx({ referring_doctor: null, insurance: null }));
+  }, [patient.id, fetchCtx]);
 
   const allDone = phase === "finished";
 
@@ -119,6 +128,8 @@ export function BatchCallSimulator({ patient, providers, preferences, onReset, o
           provider_name: provider.name,
           provider_specialty: provider.specialty,
           provider_location: provider.location,
+          referring_doctor: ctx?.referring_doctor ?? null,
+          insurance: ctx?.insurance ?? null,
           preferences: {
             preferred_locations: preferences.preferred_locations,
             days: preferences.days,
