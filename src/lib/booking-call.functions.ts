@@ -412,6 +412,24 @@ OPENING_LINE (Mara's first turn must use this verbatim, then optionally add one 
     if (firstMaraIdx >= 0) {
       turns[firstMaraIdx] = { speaker: "mara", text: canonicalOpeningLine };
     }
+    // Sanitize: office turns must include an exact clock time, not vague
+    // windows like "morning" / "afternoon" / "first thing".
+    const TIME_RE = /\b\d{1,2}:\d{2}\s*(?:am|pm|a\.m\.|p\.m\.)\b/i;
+    const VAGUE_RE = /\b(morning|afternoon|evening|first thing|later in the day|midday|midmorning|midafternoon)\b/i;
+    const fallbackSlot =
+      parsed.outcome && parsed.outcome.kind === "offered" && parsed.outcome.slot
+        ? parsed.outcome.slot
+        : nextSlot(data.provider_name, data.preferences, data.busy_slots ?? []);
+    for (let i = 0; i < turns.length; i++) {
+      const t = turns[i];
+      if (t?.speaker !== "office" || typeof t.text !== "string") continue;
+      if (VAGUE_RE.test(t.text) && !TIME_RE.test(t.text)) {
+        turns[i] = {
+          speaker: "office",
+          text: t.text.replace(VAGUE_RE, fallbackSlot),
+        };
+      }
+    }
     return {
       turns,
       outcome: parsed.outcome ?? { kind: "no_availability" },
