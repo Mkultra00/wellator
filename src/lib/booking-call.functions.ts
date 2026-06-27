@@ -33,6 +33,17 @@ const DialogInput = z.object({
   provider_name: z.string(),
   provider_specialty: z.string(),
   provider_location: z.string(),
+  referring_doctor: z.string().nullable().optional(),
+  insurance: z
+    .object({
+      payer: z.string().nullable().optional(),
+      plan: z.string().nullable().optional(),
+      member_id: z.string().nullable().optional(),
+      group_id: z.string().nullable().optional(),
+      referral_required: z.boolean().nullable().optional(),
+    })
+    .nullable()
+    .optional(),
   preferences: z.object({
     preferred_locations: z.string().optional().nullable(),
     days: z.array(z.string()).optional().default([]),
