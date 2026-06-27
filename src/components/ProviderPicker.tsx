@@ -2,7 +2,7 @@
  * ProviderPicker — referral-driven picker.
  * The patient's primary care doctor is shown at the top; specialists they
  * refer are clustered by specialty below. Patient multi-selects offices for
- * Wellator to batch-call.
+ * Mara to batch-call.
  */
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
@@ -137,10 +137,10 @@ export function ProviderPicker({ selectedIds, onChange, onConfirm }: Props) {
     <Card className="p-5">
       <div className="mb-3 flex items-start justify-between gap-3">
         <div>
-          <h2 className="text-lg font-semibold">Pick the offices Wellator should call</h2>
+          <h2 className="text-lg font-semibold">Pick the offices Mara should call</h2>
           <p className="text-sm text-muted-foreground">
             Your primary doctor's referral network. Select every office you'd be willing to see —
-            Wellator batch-calls them and books the best match for your preferences.
+            Mara batch-calls them and books the best match for your preferences.
           </p>
           {data?.patient_address && (
             <p className="mt-1 flex items-center gap-1 text-xs text-muted-foreground">

@@ -173,7 +173,7 @@ export function ProviderManager() {
           <Download className="mr-1 h-4 w-4" /> CSV template
         </Button>
         <span className="text-xs text-muted-foreground">
-          {data?.length ?? 0} providers — patients pick from this list before Wellator calls
+          {data?.length ?? 0} providers — patients pick from this list before Mara calls
         </span>
       </div>
 

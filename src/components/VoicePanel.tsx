@@ -16,7 +16,7 @@ import { Mic, MicOff, Phone, PhoneOff, Loader2, AlertCircle, Paperclip, Camera, 
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import type { Patient } from "@/lib/patient-context";
-import avatarAsset from "@/assets/wellator-avatar.png.asset.json";
+import avatarAsset from "@/assets/mara-avatar.png.asset.json";
 
 
 type Turn = { role: "user" | "agent"; text: string; at: string };
@@ -24,22 +24,22 @@ type Turn = { role: "user" | "agent"; text: string; at: string };
 export type Scenario = "new_booking" | "pt_followup" | "billing_explainer" | "reminder";
 
 const SCENARIO_LABEL: Record<Scenario, string> = {
-  new_booking: "Wellator calling the doctor's office",
+  new_booking: "Mara calling the doctor's office",
   pt_followup: "Physical therapy follow-up",
-  billing_explainer: "Talk to Wellator",
+  billing_explainer: "Talk to Mara",
   reminder: "Appointment reminder",
 };
 
 const SCENARIO_OPENER: Record<Scenario, string> = {
   new_booking:
-    "Hi, this is Wellator, an AI care navigator calling on behalf of a patient. I'd like to book a new appointment with one of your providers. Do you have a moment?",
+    "Hi, this is Mara, an AI care navigator calling on behalf of a patient. I'd like to book a new appointment with one of your providers. Do you have a moment?",
   pt_followup:
-    "Hi, this is Wellator following up after your physical therapy visit. Do you have a couple of minutes for a few quick questions?",
+    "Hi, this is Mara following up after your physical therapy visit. Do you have a couple of minutes for a few quick questions?",
   billing_explainer:
-    "Hi, this is Wellator. I can help with your bills, insurance, upcoming appointments, or procedures. What would you like to start with?",
+    "Hi, this is Mara. I can help with your bills, insurance, upcoming appointments, or procedures. What would you like to start with?",
 
   reminder:
-    "Hi, this is Wellator — a friendly reminder about your upcoming visit. Would you like to confirm, reschedule, or have me answer any questions about it?",
+    "Hi, this is Mara — a friendly reminder about your upcoming visit. Would you like to confirm, reschedule, or have me answer any questions about it?",
 };
 
 type Props = {
@@ -70,7 +70,7 @@ function VoicePanelInner({ patient, scenario, context, onClose }: Props) {
   const callLogIdRef = useRef<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const cameraInputRef = useRef<HTMLInputElement | null>(null);
-  const agentVariant: "wellator" | "wellator_billing" = scenario === "billing_explainer" ? "wellator_billing" : "wellator";
+  const agentVariant: "mara" | "mara_billing" = scenario === "billing_explainer" ? "mara_billing" : "mara";
 
 
   const conversation = useConversation({
@@ -171,7 +171,7 @@ function VoicePanelInner({ patient, scenario, context, onClose }: Props) {
         const prefLine = prefs
           ? ` The patient prefers ${prefs.time_of_day ?? "any time"} on ${(prefs.days ?? []).join(", ") || "any day"}, within ${prefs.max_distance_miles ?? "any"} miles${prefs.preferred_locations ? ` near ${prefs.preferred_locations}` : ""}${prefs.notes ? `. Notes: ${prefs.notes}` : ""}.`
           : "";
-        opener = `Hi, this is Wellator, an AI care navigator calling on behalf of ${patient.full_name}. I have a batch of ${providers.length} offices to call to book a new appointment: ${list}.${prefLine} I'll work through them one at a time — starting with the first office now. Could you help me find the next available slot?`;
+        opener = `Hi, this is Mara, an AI care navigator calling on behalf of ${patient.full_name}. I have a batch of ${providers.length} offices to call to book a new appointment: ${list}.${prefLine} I'll work through them one at a time — starting with the first office now. Could you help me find the next available slot?`;
       }
       await conversation.startSession({
         conversationToken: token,
@@ -196,7 +196,7 @@ function VoicePanelInner({ patient, scenario, context, onClose }: Props) {
     }
   }, [conversation, fetchToken, patient, scenario, context, agentVariant]);
 
-  // Auto-start "Talk with Wellator" so the user doesn't press an extra button.
+  // Auto-start "Talk with Mara" so the user doesn't press an extra button.
   useEffect(() => {
     if (scenario !== "billing_explainer") return;
     if (autoStartedRef.current) return;
@@ -242,7 +242,7 @@ function VoicePanelInner({ patient, scenario, context, onClose }: Props) {
               ...prev,
               {
                 role: "user" as const,
-                text: `📎 Shared "${file.name}" — Wellator has reviewed it.\n\n${summary}`,
+                text: `📎 Shared "${file.name}" — Mara has reviewed it.\n\n${summary}`,
                 at: new Date().toISOString(),
               },
             ];
@@ -253,7 +253,7 @@ function VoicePanelInner({ patient, scenario, context, onClose }: Props) {
             conversation.sendContextualUpdate?.(
               `The patient just shared an attachment named "${file.name}" (${file.type}). Here is what it shows:\n\n${summary}\n\nUse this to answer their questions about it.`,
             );
-            toast.success("Attachment shared with Wellator");
+            toast.success("Attachment shared with Mara");
           } else {
             toast.success("Attachment analyzed — start the call to discuss");
           }
@@ -301,10 +301,10 @@ function VoicePanelInner({ patient, scenario, context, onClose }: Props) {
             </div>
             <div className="mt-1 text-lg font-semibold">
               {scenario === "new_booking"
-                ? `Wellator is calling the office on behalf of ${patient.full_name}`
+                ? `Mara is calling the office on behalf of ${patient.full_name}`
                 : scenario === "billing_explainer"
-                  ? `Talking to Wellator — on behalf of ${patient.full_name}`
-                  : `Talking to Wellator — on behalf of ${patient.full_name}`}
+                  ? `Talking to Mara — on behalf of ${patient.full_name}`
+                  : `Talking to Mara — on behalf of ${patient.full_name}`}
             </div>
           </div>
           <VoiceOrb active={isConnected} speaking={isSpeaking} />
@@ -331,7 +331,7 @@ function VoicePanelInner({ patient, scenario, context, onClose }: Props) {
           {isConnected && (
             <div className="flex items-center gap-1 rounded-md bg-background px-3 py-2 text-sm text-muted-foreground">
               {isSpeaking ? <Mic className="h-4 w-4 text-primary" /> : <MicOff className="h-4 w-4" />}
-              {isSpeaking ? `${scenario === "billing_explainer" ? "Wellator" : "Wellator"} is speaking` : "Listening"}
+              {isSpeaking ? `${scenario === "billing_explainer" ? "Mara" : "Mara"} is speaking` : "Listening"}
             </div>
           )}
           {scenario === "billing_explainer" && (
@@ -388,7 +388,7 @@ function VoicePanelInner({ patient, scenario, context, onClose }: Props) {
                         <Loader2 className="h-3 w-3 animate-spin" /> Analyzing…
                       </span>
                     )}
-                    {a.status === "ready" && "Shared with Wellator"}
+                    {a.status === "ready" && "Shared with Mara"}
                     {a.status === "error" && <span className="text-destructive">Failed</span>}
                   </div>
                 </div>
@@ -420,8 +420,8 @@ function VoicePanelInner({ patient, scenario, context, onClose }: Props) {
           {transcript.length === 0 && (
             <div className="text-sm text-muted-foreground">
               {isConnected
-                ? `Listening… speak naturally. ${scenario === "billing_explainer" ? "Wellator" : "Wellator"} will reply out loud.`
-                : `Press Start call to begin. You'll hear ${scenario === "billing_explainer" ? "Wellator" : "Wellator"} through your speakers.`}
+                ? `Listening… speak naturally. ${scenario === "billing_explainer" ? "Mara" : "Mara"} will reply out loud.`
+                : `Press Start call to begin. You'll hear ${scenario === "billing_explainer" ? "Mara" : "Mara"} through your speakers.`}
             </div>
           )}
           {transcript.map((t, i) => (
@@ -435,7 +435,7 @@ function VoicePanelInner({ patient, scenario, context, onClose }: Props) {
               )}
             >
               <div className="mb-0.5 text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                {t.role === "agent" ? (scenario === "billing_explainer" ? "Wellator" : "Wellator") : patient.full_name}
+                {t.role === "agent" ? (scenario === "billing_explainer" ? "Mara" : "Mara") : patient.full_name}
               </div>
               {t.text}
             </div>

@@ -24,18 +24,18 @@ import { formatDistanceToNowStrict } from "date-fns";
 export const Route = createFileRoute("/inbox")({
   head: () => ({
     meta: [
-      { title: "Call inbox — Wellator" },
+      { title: "Call inbox — Mara" },
       {
         name: "description",
         content:
-          "Every call Wellator made or received — who she spoke with, the full transcript, and whether the appointment was booked, needs follow-up, or had no availability.",
+          "Every call Mara made or received — who she spoke with, the full transcript, and whether the appointment was booked, needs follow-up, or had no availability.",
       },
     ],
   }),
   component: InboxPage,
 });
 
-type Turn = { speaker: "wellator" | "office" | "patient"; who?: string; text: string };
+type Turn = { speaker: "mara" | "office" | "patient"; who?: string; text: string };
 
 type OutcomeInfo = {
   kind?: string;
@@ -103,15 +103,15 @@ function parseOutcome(raw: string | null): OutcomeInfo {
 function callerLabel(log: CallLog, outcome: OutcomeInfo): string {
   const patient = log.patients?.full_name ?? "Patient";
   if (log.scenario === "patient_confirmation") {
-    return `Wellator → ${patient}`;
+    return `Mara → ${patient}`;
   }
   if (log.scenario === "human_escalation") {
     return `Human coordinator → ${patient}`;
   }
   if (outcome.provider_name) {
-    return `Wellator → ${outcome.provider_name}'s office (for ${patient})`;
+    return `Mara → ${outcome.provider_name}'s office (for ${patient})`;
   }
-  return `Wellator (for ${patient})`;
+  return `Mara (for ${patient})`;
 }
 
 
@@ -129,7 +129,7 @@ function InboxPage() {
         <div>
           <h1 className="text-2xl font-bold">Call inbox</h1>
           <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
-            Every call Wellator made — to doctor offices on a patient's behalf, and her follow-up
+            Every call Mara made — to doctor offices on a patient's behalf, and her follow-up
             confirmation calls to the patient. Expand a row to read the full transcript.
           </p>
         </div>
@@ -222,7 +222,7 @@ function InboxPage() {
                               key={i}
                               className={cn(
                                 "rounded px-2 py-1.5 text-sm",
-                                t.speaker === "wellator" ? "bg-primary/10" : "bg-background",
+                                t.speaker === "mara" ? "bg-primary/10" : "bg-background",
                               )}
                             >
                               <div className="mb-0.5 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
@@ -241,7 +241,7 @@ function InboxPage() {
                             <div className="font-medium">Needs additional information</div>
                             <div className="text-xs text-muted-foreground">
                               {outcome.kind === "voicemail"
-                                ? "Wellator left a voicemail. Wait for a callback or re-run the call."
+                                ? "Mara left a voicemail. Wait for a callback or re-run the call."
                                 : "The office couldn't commit to a slot. Try calling again or pick another doctor."}
                             </div>
                           </div>

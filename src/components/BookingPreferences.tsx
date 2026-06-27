@@ -1,7 +1,7 @@
 /**
- * BookingPreferences — patient tells Wellator what matters before she dials.
+ * BookingPreferences — patient tells Mara what matters before she dials.
  * Captures preferred locations, available days, time-of-day window, and
- * max travel distance. Passed to Wellator as context for batch booking.
+ * max travel distance. Passed to Mara as context for batch booking.
  */
 import { useState } from "react";
 import { Card } from "@/components/ui/card";
@@ -53,7 +53,7 @@ export function BookingPreferences({ count, onBack, onSubmit }: Props) {
         <div>
           <h2 className="text-lg font-semibold">Your scheduling preferences</h2>
           <p className="text-sm text-muted-foreground">
-            Tell Wellator what works for you. She'll use this to pick the best office out of the{" "}
+            Tell Mara what works for you. She'll use this to pick the best office out of the{" "}
             {count} she's about to call.
           </p>
         </div>
@@ -125,7 +125,7 @@ export function BookingPreferences({ count, onBack, onSubmit }: Props) {
       </div>
 
       <div className="space-y-2">
-        <Label htmlFor="notes">Anything else Wellator should mention?</Label>
+        <Label htmlFor="notes">Anything else Mara should mention?</Label>
         <Textarea
           id="notes"
           placeholder="e.g. I need a morning slot before 10am, prefer female doctor, wheelchair access"

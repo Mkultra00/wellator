@@ -1,6 +1,6 @@
 /**
  * BatchCallSimulator — fully AI-driven mock batch calls.
- * Wellator (Gemini 3.5 Flash + ElevenLabs voice) calls each doctor's office.
+ * Mara (Gemini 3.5 Flash + ElevenLabs voice) calls each doctor's office.
  * A second ElevenLabs voice plays the receptionist. Both sides are generated
  * by the LLM as a short transcript per call, then spoken aloud turn-by-turn
  * with live transcript reveal. No human voice needed.
@@ -205,7 +205,7 @@ export function BatchCallSimulator({ patient, providers, preferences, onReset, o
     for (let t = 0; t < dialog.turns.length; t++) {
       if (cancelRef.current) return;
       const turn = dialog.turns[t];
-      const voiceId = turn.speaker === "wellator" ? dialog.wellator_voice_id : dialog.office_voice_id;
+      const voiceId = turn.speaker === "mara" ? dialog.mara_voice_id : dialog.office_voice_id;
       let audio: { audio_base64: string } | null = null;
       try {
         audio = await tts({ data: { text: turn.text, voice_id: voiceId } });
@@ -227,7 +227,7 @@ export function BatchCallSimulator({ patient, providers, preferences, onReset, o
         scenario: "booking_call",
         transcript: dialog.turns.map((t) => ({
           speaker: t.speaker,
-          who: t.speaker === "wellator" ? "Wellator" : `${provider.name} office`,
+          who: t.speaker === "mara" ? "Mara" : `${provider.name} office`,
           text: t.text,
         })),
         outcome: JSON.stringify({
@@ -270,7 +270,7 @@ export function BatchCallSimulator({ patient, providers, preferences, onReset, o
     }
   }, [ctx, runAll]);
 
-  // After all office calls finish, if Wellator secured any offers, call the patient
+  // After all office calls finish, if Mara secured any offers, call the patient
   // to read them out and confirm, then "email" the confirmation.
   useEffect(() => {
     if (phase !== "finished" || patientConfirmedRef.current) return;
@@ -306,7 +306,7 @@ export function BatchCallSimulator({ patient, providers, preferences, onReset, o
       for (let t = 0; t < confirm.turns.length; t++) {
         if (cancelRef.current || cancelled) return;
         const turn = confirm.turns[t];
-        const voiceId = turn.speaker === "wellator" ? confirm.wellator_voice_id : confirm.patient_voice_id;
+        const voiceId = turn.speaker === "mara" ? confirm.mara_voice_id : confirm.patient_voice_id;
         let audio: { audio_base64: string } | null = null;
         try {
           audio = await tts({ data: { text: turn.text, voice_id: voiceId } });
@@ -339,7 +339,7 @@ export function BatchCallSimulator({ patient, providers, preferences, onReset, o
         followups.push(`I'll call ${callbacks.length} office${callbacks.length === 1 ? "" : "s"} back to reschedule.`);
       if (declined.size > 0)
         followups.push(`I'll find ${declined.size === 1 ? "an alternative doctor" : `${declined.size} alternative doctors`} from your referral list.`);
-      const body = `Hi ${patient.full_name.split(" ")[0]},\n\nThis is Wellator following up on our call. Confirmed appointment${acceptedOffers.length === 1 ? "" : "s"}:\n\n${lines || "(none yet — see below)"}\n\n${followups.join(" ")}\n\nReply YES to confirm, or call us back any time.\n\n— Wellator, your care navigator`;
+      const body = `Hi ${patient.full_name.split(" ")[0]},\n\nThis is Mara following up on our call. Confirmed appointment${acceptedOffers.length === 1 ? "" : "s"}:\n\n${lines || "(none yet — see below)"}\n\n${followups.join(" ")}\n\nReply YES to confirm, or call us back any time.\n\n— Mara, your care navigator`;
       setEmailSent({
         to: `${patient.full_name.toLowerCase().replace(/\s+/g, ".")}@example.com`,
         subject,
@@ -354,7 +354,7 @@ export function BatchCallSimulator({ patient, providers, preferences, onReset, o
           scenario: "patient_confirmation",
           transcript: confirm.turns.map((t) => ({
             speaker: t.speaker,
-            who: t.speaker === "wellator" ? "Wellator" : patient.full_name,
+            who: t.speaker === "mara" ? "Mara" : patient.full_name,
             text: t.text,
           })),
           outcome: JSON.stringify({
@@ -435,7 +435,7 @@ export function BatchCallSimulator({ patient, providers, preferences, onReset, o
               transcript: [
                 {
                   speaker: "system",
-                  text: `Wellator exhausted in-network ${esc.specialty} options for ${patient.full_name}. Human care coordinator will call the patient directly.`,
+                  text: `Mara exhausted in-network ${esc.specialty} options for ${patient.full_name}. Human care coordinator will call the patient directly.`,
                 },
               ],
               outcome: JSON.stringify({
@@ -480,7 +480,7 @@ export function BatchCallSimulator({ patient, providers, preferences, onReset, o
 
       if (followupTasks.length === 0) return;
       setPhase("running");
-      toast(`Wellator is following up on ${followupTasks.length} item${followupTasks.length === 1 ? "" : "s"}…`);
+      toast(`Mara is following up on ${followupTasks.length} item${followupTasks.length === 1 ? "" : "s"}…`);
       for (const task of followupTasks) {
         if (cancelRef.current || cancelled) return;
         await task();
@@ -551,7 +551,7 @@ export function BatchCallSimulator({ patient, providers, preferences, onReset, o
             AI batch calls — Gemini 3.5 Flash · two ElevenLabs voices
           </div>
           <div className="text-lg font-semibold">
-            Wellator is calling {providers.length}{" "}
+            Mara is calling {providers.length}{" "}
             {providers.length === 1 ? "office" : "offices"} for {patient.full_name}
           </div>
           <div className="text-xs text-muted-foreground">
@@ -631,7 +631,7 @@ function PatientConfirmPanel({
       <div className="mb-2 flex items-center gap-2">
         <UserRound className="h-4 w-4 text-primary" />
         <div className="text-sm font-semibold uppercase tracking-wider">
-          Wellator → {patientName}
+          Mara → {patientName}
         </div>
         {isLive ? (
           <Badge variant="outline" className="text-xs">
@@ -651,11 +651,11 @@ function PatientConfirmPanel({
               key={i}
               className={cn(
                 "rounded px-2 py-1.5 text-sm",
-                t.speaker === "wellator" ? "bg-primary/10" : "bg-muted",
+                t.speaker === "mara" ? "bg-primary/10" : "bg-muted",
               )}
             >
               <div className="mb-0.5 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
-                {t.speaker === "wellator" ? "Wellator" : patientName}
+                {t.speaker === "mara" ? "Mara" : patientName}
               </div>
               {t.text}
             </div>
@@ -942,13 +942,13 @@ function CallRow({
               key={idx}
               className={cn(
                 "rounded px-2 py-1.5 text-sm",
-                t.speaker === "wellator"
+                t.speaker === "mara"
                   ? "bg-primary/10"
                   : "bg-muted",
               )}
             >
               <div className="mb-0.5 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
-                {t.speaker === "wellator" ? `Wellator (for ${patientName})` : `${provider.name}'s office`}
+                {t.speaker === "mara" ? `Mara (for ${patientName})` : `${provider.name}'s office`}
               </div>
               {t.text}
             </div>
