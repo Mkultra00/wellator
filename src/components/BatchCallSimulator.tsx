@@ -40,6 +40,7 @@ type CallState = {
   turns: DialogTurn[];
   revealed: number; // how many turns shown so far
   outcome?: DialogOutcome;
+  decision?: "accepted" | "rejected" | "cancelled";
 };
 
 function scoreOutcome(o: DialogOutcome | undefined, prefs: BookingPrefs, provider: PickedProvider) {
@@ -185,6 +186,29 @@ export function BatchCallSimulator({ patient, providers, preferences, onReset, o
 
   function confirmBooking(i: number) {
     setConfirmedIdx(i);
+    setCalls((prev) => prev.map((c, idx) => (idx === i ? { ...c, decision: "accepted" } : c)));
+    toast.success(`Appointment confirmed with ${calls[i].provider.name}`);
+  }
+
+  async function recallOne(i: number) {
+    setCalls((prev) =>
+      prev.map((c, idx) =>
+        idx === i
+          ? { ...c, status: "queued", outcome: undefined, turns: [], revealed: 0, decision: undefined }
+          : c,
+      ),
+    );
+    if (confirmedIdx === i) setConfirmedIdx(null);
+    setActiveIdx(i);
+    setPhase("running");
+    await runOne(i);
+    setPhase("finished");
+  }
+
+  function cancelOne(i: number) {
+    setCalls((prev) => prev.map((c, idx) => (idx === i ? { ...c, decision: "cancelled" } : c)));
+    if (confirmedIdx === i) setConfirmedIdx(null);
+    toast(`Cancelled ${calls[i].provider.name}. Pick another doctor from the list.`);
   }
 
   return (
@@ -233,36 +257,175 @@ export function BatchCallSimulator({ patient, providers, preferences, onReset, o
             isActive={i === activeIdx && phase === "running"}
             isBest={best === i}
             isConfirmed={confirmedIdx === i}
-            canConfirm={allDone && c.outcome?.kind === "offered" && confirmedIdx === null}
+            canConfirm={allDone && c.outcome?.kind === "offered" && c.decision !== "accepted"}
             onConfirm={() => confirmBooking(i)}
           />
         ))}
       </div>
 
       {allDone && (
-        <div className="border-t border-border bg-muted/40 p-4 text-sm">
-          {confirmedIdx !== null ? (
-            <div className="flex items-center gap-2 text-emerald-700 dark:text-emerald-400">
-              <CheckCircle2 className="h-4 w-4" />
-              Booked with {calls[confirmedIdx].provider.name}
-              {calls[confirmedIdx].outcome?.kind === "offered" &&
-                ` — ${(calls[confirmedIdx].outcome as { slot: string }).slot}`}
-              .
-            </div>
-          ) : best !== null ? (
-            <div>
-              <Trophy className="mr-1 inline h-4 w-4 text-amber-600" />
-              Best match: <strong>{calls[best].provider.name}</strong> at{" "}
-              {(calls[best].outcome as { slot: string }).slot}. Click Confirm on that row to book.
-            </div>
-          ) : (
-            <div className="text-muted-foreground">
-              No offices had availability. Mara will retry later or escalate to a human navigator.
-            </div>
-          )}
-        </div>
+        <FinalReport
+          calls={calls}
+          preferences={preferences}
+          bestIdx={best}
+          confirmedIdx={confirmedIdx}
+          onAccept={confirmBooking}
+          onRecall={recallOne}
+          onCancel={cancelOne}
+          onPickMore={onReset}
+        />
       )}
     </Card>
+  );
+}
+
+function FinalReport({
+  calls,
+  preferences,
+  bestIdx,
+  confirmedIdx,
+  onAccept,
+  onRecall,
+  onCancel,
+  onPickMore,
+}: {
+  calls: CallState[];
+  preferences: BookingPrefs;
+  bestIdx: number | null;
+  confirmedIdx: number | null;
+  onAccept: (i: number) => void;
+  onRecall: (i: number) => void;
+  onCancel: (i: number) => void;
+  onPickMore: () => void;
+}) {
+  const offered = calls.filter((c) => c.outcome?.kind === "offered");
+  const accepted = calls.filter((c) => c.decision === "accepted");
+  const cancelled = calls.filter((c) => c.decision === "cancelled");
+  const noAvail = calls.filter((c) => c.outcome?.kind === "no_availability");
+  const vm = calls.filter((c) => c.outcome?.kind === "voicemail");
+
+  return (
+    <div className="border-t-2 border-border bg-muted/40 p-4">
+      <div className="mb-3 flex items-center gap-2">
+        <Trophy className="h-4 w-4 text-amber-600" />
+        <div className="text-sm font-semibold uppercase tracking-wider">Final report</div>
+      </div>
+
+      <div className="mb-4 grid grid-cols-2 gap-2 text-xs sm:grid-cols-5">
+        <Stat label="Called" value={calls.length} />
+        <Stat label="Slots offered" value={offered.length} />
+        <Stat label="Accepted" value={accepted.length} tone="emerald" />
+        <Stat label="No availability" value={noAvail.length} tone="destructive" />
+        <Stat label="Voicemail" value={vm.length} tone="amber" />
+      </div>
+
+      <div className="space-y-2">
+        {calls.map((c, i) => {
+          const isOffered = c.outcome?.kind === "offered";
+          const slot = isOffered ? (c.outcome as { slot: string }).slot : null;
+          const fitsDistance =
+            c.provider.distance_miles == null ||
+            c.provider.distance_miles <= preferences.max_distance_miles;
+          return (
+            <div
+              key={c.provider.id}
+              className={cn(
+                "flex flex-wrap items-center justify-between gap-2 rounded-md border border-border bg-background p-3 text-sm",
+                c.decision === "accepted" && "border-emerald-500/50 bg-emerald-50/40 dark:bg-emerald-950/20",
+                c.decision === "cancelled" && "opacity-60",
+                bestIdx === i && c.decision !== "accepted" && "border-amber-500/60",
+              )}
+            >
+              <div className="min-w-0">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="font-medium">{c.provider.name}</span>
+                  <Badge variant="secondary" className="text-xs">
+                    {c.provider.specialty}
+                  </Badge>
+                  {c.provider.distance_miles != null && (
+                    <span className="text-xs text-muted-foreground">
+                      · {c.provider.distance_miles} mi
+                      {!fitsDistance && " (over your max)"}
+                    </span>
+                  )}
+                  {bestIdx === i && c.decision !== "accepted" && (
+                    <Badge variant="outline" className="border-amber-500 text-xs text-amber-700">
+                      Best match
+                    </Badge>
+                  )}
+                </div>
+                <div className="mt-0.5 text-xs text-muted-foreground">
+                  {c.decision === "accepted"
+                    ? `✅ Booked — ${slot}`
+                    : c.decision === "cancelled"
+                      ? "❌ Cancelled by patient"
+                      : isOffered
+                        ? `Offered ${slot}`
+                        : c.outcome?.kind === "voicemail"
+                          ? "Left voicemail — no live response"
+                          : "No availability"}
+                </div>
+              </div>
+
+              <div className="flex flex-wrap gap-2">
+                {isOffered && c.decision !== "accepted" && c.decision !== "cancelled" && (
+                  <Button size="sm" onClick={() => onAccept(i)}>
+                    Time's good — accept
+                  </Button>
+                )}
+                {c.decision !== "cancelled" && (
+                  <Button size="sm" variant="outline" onClick={() => onRecall(i)}>
+                    Call again
+                  </Button>
+                )}
+                {c.decision !== "cancelled" && c.decision !== "accepted" && (
+                  <Button size="sm" variant="ghost" onClick={() => onCancel(i)}>
+                    Cancel
+                  </Button>
+                )}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      <div className="mt-4 flex flex-wrap items-center justify-between gap-2 border-t border-border pt-3">
+        <div className="text-xs text-muted-foreground">
+          {accepted.length > 0
+            ? `${accepted.length} appointment${accepted.length === 1 ? "" : "s"} booked.`
+            : confirmedIdx === null
+              ? "No times accepted yet — accept one, recall an office, or pick another doctor."
+              : ""}
+        </div>
+        <Button size="sm" variant="outline" onClick={onPickMore} className="gap-1">
+          <ArrowLeft className="h-4 w-4" /> Pick another doctor from the list
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+function Stat({
+  label,
+  value,
+  tone,
+}: {
+  label: string;
+  value: number;
+  tone?: "emerald" | "destructive" | "amber";
+}) {
+  return (
+    <div
+      className={cn(
+        "rounded-md border border-border bg-background p-2 text-center",
+        tone === "emerald" && "border-emerald-500/40",
+        tone === "destructive" && "border-destructive/40",
+        tone === "amber" && "border-amber-500/40",
+      )}
+    >
+      <div className="text-lg font-semibold">{value}</div>
+      <div className="text-[10px] uppercase tracking-wider text-muted-foreground">{label}</div>
+    </div>
   );
 }
 
