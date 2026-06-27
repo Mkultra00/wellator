@@ -10,7 +10,7 @@ import {
 import { Stethoscope, Inbox, LayoutDashboard } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { ReactNode } from "react";
-import avatarAsset from "@/assets/wellator-avatar.png";
+import avatarAsset from "@/assets/wellator-avatar.png.asset.json";
 
 function NavLink({
   to,
@@ -49,7 +49,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-4 px-4 py-3">
           <Link to="/" className="flex items-center gap-3">
             <img
-              src={avatarAsset}
+              src={avatarAsset.url}
               alt="Mara"
               className="h-[72px] w-[72px] rounded-full object-cover ring-2 ring-primary/20"
               width={72}
