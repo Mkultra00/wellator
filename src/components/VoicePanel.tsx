@@ -16,7 +16,7 @@ import { Mic, MicOff, Phone, PhoneOff, Loader2, AlertCircle, Paperclip, Camera, 
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import type { Patient } from "@/lib/patient-context";
-import avatarAsset from "@/assets/wellator-avatar.png.asset.json";
+import avatarAsset from "@/assets/wellator-avatar.png";
 
 
 type Turn = { role: "user" | "agent"; text: string; at: string };
@@ -450,18 +450,18 @@ function VoiceOrb({ active, speaking }: { active: boolean; speaking: boolean }) 
   return (
     <div className="relative">
       <img
-        src={avatarAsset.url}
-        alt="Wellator"
+        src={avatarAsset}
+        alt="Mara"
         className={cn(
-          "h-14 w-14 rounded-full border-2 object-cover transition-all",
+          "h-28 w-28 rounded-full border-2 object-cover transition-all",
           active
             ? speaking
               ? "border-primary shadow-lg shadow-primary/30"
               : "border-primary/60"
             : "border-muted-foreground/40 opacity-80 grayscale",
         )}
-        width={56}
-        height={56}
+        width={112}
+        height={112}
       />
       {active && speaking && (
         <div className="absolute inset-0 animate-ping rounded-full border-2 border-primary/60" />
