@@ -63,4 +63,12 @@ Required keys are managed through Lovable Secrets:
 
 ---
 
+## Team
+
+- Frank Yu
+- Forrest Pan
+- Jitender Thakur
+
+---
+
 Built as a demo for Mara — AI Care Navigator.
