@@ -185,6 +185,7 @@ function VoicePanelInner({ patient, scenario, context, onClose }: Props) {
           scenario_label: SCENARIO_LABEL[scenario],
           opener,
           context_json: JSON.stringify(context ?? {}),
+          app_help: `Mara can help you use this app. To book an appointment, tap "Book an appointment" and pick doctors your primary care doctor suggested. Mara will call the offices and report back. To review past or upcoming calls, tap "Scheduled calls". To change patients, use the menu at the top right. You can also upload a bill or insurance photo during this chat and Mara will explain it.`,
         },
       });
     } catch (e) {
