@@ -79,8 +79,6 @@ const DialogInput = z.object({
     .object({
       payer: z.string().nullable().optional(),
       plan: z.string().nullable().optional(),
-      member_id: z.string().nullable().optional(),
-      group_id: z.string().nullable().optional(),
       referral_required: z.boolean().nullable().optional(),
     })
     .nullable()
@@ -124,9 +122,9 @@ async function loadDemoPatientContext(patientId?: string) {
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
   const { data, error } = await supabaseAdmin
     .from("patients")
-    .select(
-      "primary_provider:providers!patients_primary_provider_id_fkey(name,specialty),insurance_profiles(payer,plan,member_id,group_id,referral_required)",
-    )
+      .select(
+        "primary_provider:providers!patients_primary_provider_id_fkey(name,specialty),insurance_profiles(payer,plan,referral_required)",
+      )
     .eq("id", patientId)
     .maybeSingle();
   if (error || !data) return null;

@@ -120,7 +120,7 @@ export async function runTool(
                 ? `${primary.name} (${primary.specialty})`
                 : "primary care provider on file in demo profile",
               insurance_summary: insurance?.payer
-                ? `${insurance.payer}${insurance.plan ? ` — ${insurance.plan}` : ""}${insurance.member_id ? `, member ID ${insurance.member_id}` : ""}${insurance.referral_required ? ", referral required" : ""}`
+                ? `${insurance.payer}${insurance.plan ? ` — ${insurance.plan}` : ""}${insurance.referral_required ? ", referral required" : ""}`
                 : "insurance on file in demo profile",
             }
           : null,
