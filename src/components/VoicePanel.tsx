@@ -36,7 +36,7 @@ const SCENARIO_OPENER: Record<Scenario, string> = {
   pt_followup:
     "Hi, this is Mara following up after your physical therapy visit. Do you have a couple of minutes for a few quick questions?",
   billing_explainer:
-    "Hi, this is Mara. I can help with your bills, insurance, upcoming appointments, or procedures. What would you like to start with?",
+    "Hi, this is Mara. I can help with your bills, insurance, upcoming appointments, or procedures — and I can also explain how to use this app or answer questions about how it works. What would you like to start with?",
 
   reminder:
     "Hi, this is Mara — a friendly reminder about your upcoming visit. Would you like to confirm, reschedule, or have me answer any questions about it?",
