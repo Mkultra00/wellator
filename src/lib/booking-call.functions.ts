@@ -58,7 +58,7 @@ async function callLLM(lovableKey: string, system: string, user: string): Promis
     method: "POST",
     headers: { "Content-Type": "application/json", "Lovable-API-Key": lovableKey },
     body: JSON.stringify({
-      model: "google/gemini-3.5-flash",
+      model: "google/gemini-2.5-flash",
       messages: [
         { role: "system", content: system },
         { role: "user", content: user },
