@@ -14,8 +14,8 @@ import { ProviderManager } from "@/components/ProviderManager";
 export const Route = createFileRoute("/admin")({
   head: () => ({
     meta: [
-      { title: "Clinician dashboard — Mara" },
-      { name: "description", content: "Bookings, transcripts, and PT feedback captured by Mara." },
+      { title: "Clinician dashboard — Wellator" },
+      { name: "description", content: "Bookings, transcripts, and PT feedback captured by Wellator." },
     ],
   }),
   component: AdminPage,
@@ -166,7 +166,7 @@ function AdminPage() {
                 <div className="mt-3 max-h-48 space-y-1 overflow-y-auto rounded bg-muted/40 p-3 text-sm">
                   {(c.transcript as Array<{ role: string; text: string }> | null)?.map((t, i) => (
                     <div key={i}>
-                      <span className="font-semibold">{t.role === "agent" ? "Mara" : "Patient"}:</span>{" "}
+                      <span className="font-semibold">{t.role === "agent" ? "Wellator" : "Patient"}:</span>{" "}
                       {t.text}
                     </div>
                   )) ?? <span className="text-muted-foreground">No transcript captured.</span>}
