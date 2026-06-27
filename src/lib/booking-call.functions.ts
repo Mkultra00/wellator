@@ -195,6 +195,28 @@ function nextSlot(
   }
   return `${rotatedDays[0]}, July ${7 + offset} at ${baseTime}`;
 }
+function ensureMaraClosing(turns: { speaker: "mara" | "office" | "patient"; text: string }[]): { speaker: "mara" | "office" | "patient"; text: string }[] {
+  if (turns.length === 0) return turns;
+  const last = turns[turns.length - 1];
+  const hasThanks = /thank/i.test(last.text);
+  const hasGoodbye = /goodbye|bye|take care|have a wonderful/i.test(last.text);
+  if (last.speaker === "mara" && hasThanks && hasGoodbye) return turns;
+  if (last.speaker === "mara") {
+    const closing = hasGoodbye
+      ? " Thank you so much again."
+      : hasThanks
+        ? " Goodbye, and take care!"
+        : " Thank you so much. Goodbye, and take care!";
+    return [
+      ...turns.slice(0, -1),
+      { ...last, text: last.text.trim() + closing },
+    ];
+  }
+  return [
+    ...turns,
+    { speaker: "mara", text: "Thank you so much for your time today. Goodbye, and take care!" },
+  ];
+}
 
 function prepForSpecialty(specialty: string): PrepItem[] {
   const s = specialty.toLowerCase();
