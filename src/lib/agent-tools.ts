@@ -22,7 +22,6 @@ export type ToolName =
   | "get_appointments"
   | "get_insurance_summary"
   | "get_billing_summary"
-  | "record_pt_feedback"
   | "request_human_transfer";
 
 export async function runTool(
@@ -149,27 +148,6 @@ export async function runTool(
       const { data, error } = await q.order("issued_at", { ascending: false }).limit(5);
       if (error) throw error;
       return { bills: data ?? [] };
-    }
-    case "record_pt_feedback": {
-      const { patient_id, appointment_id, pain_0_10, mobility_change, adherence, comment } =
-        params as {
-          patient_id: string;
-          appointment_id?: string;
-          pain_0_10?: number;
-          mobility_change?: string;
-          adherence?: string;
-          comment?: string;
-        };
-      const { error } = await supabase.from("pt_feedback").insert({
-        patient_id,
-        appointment_id: appointment_id ?? null,
-        pain_0_10: pain_0_10 ?? null,
-        mobility_change: mobility_change ?? null,
-        adherence: adherence ?? null,
-        comment: comment ?? null,
-      });
-      if (error) throw error;
-      return { ok: true };
     }
     case "request_human_transfer": {
       const { patient_id, reason, session_id } = params as {
