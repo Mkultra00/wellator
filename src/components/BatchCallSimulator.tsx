@@ -478,6 +478,7 @@ export function BatchCallSimulator({ patient, providers, preferences, onReset, o
         const audio = await ttsWithTimeout(turn.text, voiceId);
         if (audio) await playAudio(audio.audio_base64);
         else await speakWithBrowser(turn.text, turn.speaker);
+        if (t < confirm.turns.length - 1) await new Promise((r) => setTimeout(r, TURN_GAP_MS));
       }
       if (cancelled) return;
       patientConfirmedRef.current = true;
