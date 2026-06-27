@@ -252,9 +252,9 @@ export const generateBookingDialog = createServerFn({ method: "POST" })
       : prefs.time_of_day ?? "any time";
     const prefLine = `Preferred ${todStr} on ${
       (prefs.days ?? []).join(", ") || "any weekday"
-    }, within ${prefs.max_distance_miles ?? "any"} miles${
-      prefs.preferred_locations ? ` near ${prefs.preferred_locations}` : ""
-    }${prefs.notes ? `. Notes: ${prefs.notes}` : ""}`;
+    }${prefs.preferred_locations ? ` near ${prefs.preferred_locations}` : ""}${
+      prefs.notes ? `. Notes: ${prefs.notes}` : ""
+    }`;
 
 
     const system = `You generate realistic short phone-call transcripts between Mara (an AI care navigator calling on behalf of a patient) and a scheduler at a doctor's office. The person who answers IS the office scheduler — they have the live appointment calendar open in front of them and full authority to confirm, hold, and book slots themselves on this call. They MUST complete the scheduling check live. They must NEVER say things like "let me check with the scheduler", "I'll have to check with scheduling", "I'll need to call you back", "let me transfer you", "I'll have someone get back to you", "please leave a voicemail", or otherwise defer the availability check to another person, later call, voicemail, or callback. Instead they say things like "Let me pull up the calendar… I have Tuesday the 14th at 10:15am or Thursday the 16th at 2:30pm — which works?" and then BOOK the chosen slot on the call ("Great, I've got you down for Thursday at 2:30 with Dr. X."). Outcomes on the call are exactly one of: a concrete offered+booked slot, or a live "no availability in that window" answer with the next open date. Output ONLY valid JSON matching: {"turns":[{"speaker":"mara"|"office","text":"..."}], "outcome": {"kind":"offered","slot":"...","prep":[{"text":"...","category":"bring"|"pcp_send"|"lab"|"imaging"|"cardiac"|"in_office"|"other","bookable":true|false}]} | {"kind":"no_availability"}}. 6-12 turns. Natural, concise spoken lines (1-2 sentences each).
