@@ -217,7 +217,7 @@ function deterministicAvailabilityDialog(args: {
   plan: string | null;
   reason?: string;
 }) {
-  const slot = nextSlot(args.data.provider_name, args.data.preferences);
+  const slot = nextSlot(args.data.provider_name, args.data.preferences, args.data.busy_slots ?? []);
   const prep = prepForSpecialty(args.data.provider_specialty);
   const noAvailability = stableHash(`${args.data.provider_name}:${args.data.provider_specialty}`) % 5 === 0;
   const insuranceLine = args.payer ? `${args.payer}${args.plan ? ` ${args.plan}` : ""}` : "the insurance on file";
