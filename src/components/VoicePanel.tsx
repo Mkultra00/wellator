@@ -209,7 +209,7 @@ function VoicePanelInner({ patient, scenario, context, onClose }: Props) {
     } finally {
       setConnecting(false);
     }
-  }, [conversation, fetchToken, patient, scenario, context, agentVariant]);
+  }, [conversation, fetchToken, fetchVoiceContext, patient, scenario, context, agentVariant]);
 
   // Auto-start "Talk with Mara" so the user doesn't press an extra button.
   useEffect(() => {
