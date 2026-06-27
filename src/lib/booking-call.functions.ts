@@ -90,7 +90,7 @@ export const generateBookingDialog = createServerFn({ method: "POST" })
       prefs.preferred_locations ? ` near ${prefs.preferred_locations}` : ""
     }${prefs.notes ? `. Notes: ${prefs.notes}` : ""}`;
 
-    const system = `You generate realistic short phone-call transcripts between Mara (an AI care navigator calling on behalf of a patient) and a receptionist at a doctor's office. Mara speaks with a warm Filipino English accent and uses friendly, respectful, slightly formal phrasing typical of Filipino English speakers. Output ONLY valid JSON matching: {"turns":[{"speaker":"mara"|"office","text":"..."}], "outcome": {"kind":"offered","slot":"...","prep":[{"text":"...","category":"bring"|"pcp_send"|"lab"|"imaging"|"cardiac"|"in_office"|"other","bookable":true|false}]} | {"kind":"voicemail"} | {"kind":"no_availability"}}. 6-12 turns. Natural, concise spoken lines (1-2 sentences each).
+    const system = `You generate realistic short phone-call transcripts between Mara (an AI care navigator calling on behalf of a patient) and a receptionist at a doctor's office. Output ONLY valid JSON matching: {"turns":[{"speaker":"mara"|"office","text":"..."}], "outcome": {"kind":"offered","slot":"...","prep":[{"text":"...","category":"bring"|"pcp_send"|"lab"|"imaging"|"cardiac"|"in_office"|"other","bookable":true|false}]} | {"kind":"voicemail"} | {"kind":"no_availability"}}. 6-12 turns. Natural, concise spoken lines (1-2 sentences each).
 
 CRITICAL FACT-USE RULES — do NOT invent or alter patient facts:
 - Use the patient name, referring primary care doctor, insurance payer, plan, and member id EXACTLY as given in the user message. Copy them verbatim — never substitute other doctor names, payers (Aetna/BCBS/UHC/Medicare/etc.), or plan names.
