@@ -92,13 +92,16 @@ export function BatchCallSimulator({ patient, providers, preferences, onReset, o
   const fetchCtx = useServerFn(getBookingContext);
 
 
+  const startedRef = useRef(false);
+
   useEffect(() => {
     fetchCtx({ data: { patient_id: patient.id } })
       .then((r) => setCtx(r))
       .catch(() => setCtx({ referring_doctor: null, insurance: null }));
   }, [patient.id, fetchCtx]);
 
-  const allDone = phase === "finished";
+  const allDone = phase === "finished" || phase === "confirming" || phase === "confirmed";
+
 
   const best = useMemo(() => {
     if (!allDone) return null;
