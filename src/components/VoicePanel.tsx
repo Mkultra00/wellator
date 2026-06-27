@@ -7,15 +7,16 @@
 import { useConversation } from "@elevenlabs/react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
-import { getElevenLabsConversationToken } from "@/lib/elevenlabs.functions";
+import { getElevenLabsConversationToken, analyzeAttachment } from "@/lib/elevenlabs.functions";
 import type { ToolName } from "@/lib/agent-tools";
 import { insertCallLog, finalizeCallLog } from "@/lib/data.functions";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { Mic, MicOff, Phone, PhoneOff, Loader2, AlertCircle } from "lucide-react";
+import { Mic, MicOff, Phone, PhoneOff, Loader2, AlertCircle, Paperclip, Camera, FileText, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import type { Patient } from "@/lib/patient-context";
+
 
 type Turn = { role: "user" | "agent"; text: string; at: string };
 
