@@ -22,8 +22,13 @@ export type BookingPrefs = {
   notes: string;
 };
 
-const DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+const DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
 const TIMES = ["morning", "afternoon", "evening"] as const;
+
+
+
+
+
 
 
 type Props = {
@@ -35,7 +40,7 @@ type Props = {
 export function BookingPreferences({ count, onBack, onSubmit }: Props) {
   const [prefs, setPrefs] = useState<BookingPrefs>({
     preferred_locations: "",
-    days: ["Mon", "Tue", "Wed", "Thu", "Fri"],
+    days: ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"],
     time_of_day: [],
     max_distance_miles: 15,
     notes: "",
