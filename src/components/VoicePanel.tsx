@@ -7,15 +7,16 @@
 import { useConversation } from "@elevenlabs/react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
-import { getElevenLabsConversationToken } from "@/lib/elevenlabs.functions";
+import { getElevenLabsConversationToken, analyzeAttachment } from "@/lib/elevenlabs.functions";
 import type { ToolName } from "@/lib/agent-tools";
 import { insertCallLog, finalizeCallLog } from "@/lib/data.functions";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { Mic, MicOff, Phone, PhoneOff, Loader2, AlertCircle } from "lucide-react";
+import { Mic, MicOff, Phone, PhoneOff, Loader2, AlertCircle, Paperclip, Camera, FileText, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import type { Patient } from "@/lib/patient-context";
+
 
 type Turn = { role: "user" | "agent"; text: string; at: string };
 
@@ -51,7 +52,14 @@ export function VoicePanel({ patient, scenario, context, onClose }: Props) {
   const [connecting, setConnecting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [transcript, setTranscript] = useState<Turn[]>([]);
+  const [attachments, setAttachments] = useState<
+    Array<{ id: string; filename: string; mime: string; previewUrl?: string; status: "analyzing" | "ready" | "error"; summary?: string }>
+  >([]);
   const callLogIdRef = useRef<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const cameraInputRef = useRef<HTMLInputElement | null>(null);
+  const agentVariant: "mara" | "marie" = scenario === "billing_explainer" ? "marie" : "mara";
+
 
   const conversation = useConversation({
     clientTools: {
@@ -120,13 +128,15 @@ export function VoicePanel({ patient, scenario, context, onClose }: Props) {
   }, [transcript]);
 
   const fetchToken = useServerFn(getElevenLabsConversationToken);
+  const runAnalyze = useServerFn(analyzeAttachment);
 
   const start = useCallback(async () => {
     setError(null);
     setConnecting(true);
     try {
       await navigator.mediaDevices.getUserMedia({ audio: true });
-      const { token } = await fetchToken();
+      const { token } = await fetchToken({ data: { variant: agentVariant } });
+
       const batch = context as
         | {
             providers?: { name: string; specialty: string; location: string }[];
@@ -170,7 +180,73 @@ export function VoicePanel({ patient, scenario, context, onClose }: Props) {
     } finally {
       setConnecting(false);
     }
-  }, [conversation, fetchToken, patient, scenario, context]);
+  }, [conversation, fetchToken, patient, scenario, context, agentVariant]);
+
+  const handleFiles = useCallback(
+    async (files: FileList | null) => {
+      if (!files || files.length === 0) return;
+      for (const file of Array.from(files)) {
+        const id = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+        const isImage = file.type.startsWith("image/");
+        const previewUrl = isImage ? URL.createObjectURL(file) : undefined;
+        setAttachments((prev) => [
+          ...prev,
+          { id, filename: file.name, mime: file.type || "application/octet-stream", previewUrl, status: "analyzing" },
+        ]);
+        try {
+          const dataUrl = await new Promise<string>((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => resolve(reader.result as string);
+            reader.onerror = () => reject(reader.error ?? new Error("read failed"));
+            reader.readAsDataURL(file);
+          });
+          const { summary } = await runAnalyze({
+            data: { data_url: dataUrl, mime: file.type || "application/octet-stream", filename: file.name },
+          });
+          setAttachments((prev) =>
+            prev.map((a) => (a.id === id ? { ...a, status: "ready", summary } : a)),
+          );
+          // Show in transcript and push to live agent if connected.
+          setTranscript((prev) => {
+            const next = [
+              ...prev,
+              {
+                role: "user" as const,
+                text: `📎 Shared "${file.name}" — Mara has reviewed it.\n\n${summary}`,
+                at: new Date().toISOString(),
+              },
+            ];
+            transcriptRef.current = next;
+            return next;
+          });
+          if (conversation.status === "connected") {
+            conversation.sendContextualUpdate?.(
+              `The patient just shared an attachment named "${file.name}" (${file.type}). Here is what it shows:\n\n${summary}\n\nUse this to answer their questions about it.`,
+            );
+            toast.success("Attachment shared with Mara");
+          } else {
+            toast.success("Attachment analyzed — start the call to discuss");
+          }
+        } catch (e) {
+          const msg = e instanceof Error ? e.message : "Couldn't analyze attachment";
+          setAttachments((prev) =>
+            prev.map((a) => (a.id === id ? { ...a, status: "error", summary: msg } : a)),
+          );
+          toast.error("Attachment failed", { description: msg });
+        }
+      }
+    },
+    [conversation, runAnalyze],
+  );
+
+  function removeAttachment(id: string) {
+    setAttachments((prev) => {
+      const target = prev.find((a) => a.id === id);
+      if (target?.previewUrl) URL.revokeObjectURL(target.previewUrl);
+      return prev.filter((a) => a.id !== id);
+    });
+  }
+
 
   const stop = useCallback(async () => {
     await conversation.endSession();
@@ -226,7 +302,76 @@ export function VoicePanel({ patient, scenario, context, onClose }: Props) {
               {isSpeaking ? "Mara is speaking" : "Listening"}
             </div>
           )}
+          {scenario === "billing_explainer" && (
+            <>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*,application/pdf"
+                multiple
+                hidden
+                onChange={(e) => {
+                  handleFiles(e.target.files);
+                  e.target.value = "";
+                }}
+              />
+              <input
+                ref={cameraInputRef}
+                type="file"
+                accept="image/*"
+                capture="environment"
+                hidden
+                onChange={(e) => {
+                  handleFiles(e.target.files);
+                  e.target.value = "";
+                }}
+              />
+              <Button variant="outline" size="lg" onClick={() => fileInputRef.current?.click()} className="gap-2">
+                <Paperclip className="h-4 w-4" /> Attach bill / photo / PDF
+              </Button>
+              <Button variant="outline" size="lg" onClick={() => cameraInputRef.current?.click()} className="gap-2">
+                <Camera className="h-4 w-4" /> Take photo
+              </Button>
+            </>
+          )}
         </div>
+
+        {attachments.length > 0 && (
+          <div className="flex flex-wrap gap-2">
+            {attachments.map((a) => (
+              <div
+                key={a.id}
+                className="group relative flex items-center gap-2 rounded-md border border-border bg-background p-2 pr-8 text-xs"
+              >
+                {a.previewUrl ? (
+                  <img src={a.previewUrl} alt={a.filename} className="h-10 w-10 rounded object-cover" />
+                ) : (
+                  <FileText className="h-10 w-10 text-muted-foreground" />
+                )}
+                <div className="max-w-[12rem]">
+                  <div className="truncate font-medium">{a.filename}</div>
+                  <div className="text-muted-foreground">
+                    {a.status === "analyzing" && (
+                      <span className="inline-flex items-center gap-1">
+                        <Loader2 className="h-3 w-3 animate-spin" /> Analyzing…
+                      </span>
+                    )}
+                    {a.status === "ready" && "Shared with Mara"}
+                    {a.status === "error" && <span className="text-destructive">Failed</span>}
+                  </div>
+                </div>
+                <button
+                  onClick={() => removeAttachment(a.id)}
+                  className="absolute right-1 top-1 rounded p-0.5 text-muted-foreground hover:bg-muted"
+                  aria-label="Remove attachment"
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+
 
         {error && (
           <div className="rounded-md border border-destructive/50 bg-destructive/10 p-3 text-sm text-destructive">
