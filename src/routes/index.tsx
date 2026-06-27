@@ -36,7 +36,7 @@ type CardDef = {
   id: Scenario;
   title: string;
   body: string;
-  Icon: typeof CalendarPlus;
+  Icon: typeof BookAppointmentIcon;
 };
 
 const CARDS: CardDef[] = [
@@ -44,14 +44,13 @@ const CARDS: CardDef[] = [
     id: "new_booking",
     title: "Book an appointment",
     body: "Pick every doctor you'd be willing to see — Mara batch-calls each office, compares availability against your preferences, and books the best match.",
-    Icon: CalendarPlus,
+    Icon: BookAppointmentIcon,
   },
   {
     id: "billing_explainer",
     title: "Talk to Mara",
     body: "Chat with Mara about billing, insurance, appointments, or procedures — and ask her how to use this app. She can walk you through booking a visit, checking scheduled calls, or anything else.",
-    Icon: FileText,
-
+    Icon: TalkToMaraIcon,
   },
 ];
 
