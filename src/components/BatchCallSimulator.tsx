@@ -72,9 +72,9 @@ type Props = {
   onClose: () => void;
 };
 
-const DIALOG_TIMEOUT_MS = 4000;
-const TTS_TIMEOUT_MS = 8000;
-const AUDIO_TIMEOUT_MS = 12000;
+const DIALOG_TIMEOUT_MS = 3000;
+const TTS_TIMEOUT_MS = 3000;
+const AUDIO_TIMEOUT_MS = 6000;
 
 export function BatchCallSimulator({ patient, providers, preferences, onReset, onClose }: Props) {
   const [calls, setCalls] = useState<CallState[]>(() =>
@@ -187,7 +187,7 @@ export function BatchCallSimulator({ patient, providers, preferences, onReset, o
         };
         utterance.onend = finish;
         utterance.onerror = finish;
-        window.setTimeout(finish, Math.min(AUDIO_TIMEOUT_MS, Math.max(2500, text.length * 55)));
+        window.setTimeout(finish, Math.min(4500, Math.max(1800, text.length * 28)));
         window.speechSynthesis.speak(utterance);
       } catch {
         resolve();
@@ -315,14 +315,16 @@ export function BatchCallSimulator({ patient, providers, preferences, onReset, o
   async function playDialog(idx: number, provider: PickedProvider, dialog: PreparedDialog) {
     setCalls((prev) =>
       prev.map((c, i) =>
-        i === idx ? { ...c, status: "live", turns: dialog.turns, revealed: 0 } : c,
+        // Show the transcript immediately. Audio services can be slow or
+        // blocked by browser autoplay rules, but the booking demo should never
+        // look blank while waiting for speech.
+        i === idx ? { ...c, status: "live", turns: dialog.turns, revealed: dialog.turns.length } : c,
       ),
     );
     for (let t = 0; t < dialog.turns.length; t++) {
       if (cancelRef.current) return;
       const turn = dialog.turns[t];
       const voiceId = turn.speaker === "mara" ? dialog.mara_voice_id : dialog.office_voice_id;
-      setCalls((prev) => prev.map((c, i) => (i === idx ? { ...c, revealed: t + 1 } : c)));
       const audio = await ttsWithTimeout(turn.text, voiceId);
       if (audio) await playAudio(audio.audio_base64);
       else await speakWithBrowser(turn.text, turn.speaker);
