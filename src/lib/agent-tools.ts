@@ -19,6 +19,7 @@ export type ToolName =
   | "find_providers"
   | "check_availability"
   | "book_appointment"
+  | "get_appointments"
   | "get_insurance_summary"
   | "get_billing_summary"
   | "record_pt_feedback"
@@ -94,6 +95,20 @@ export async function runTool(
         .single();
       if (apptErr) throw apptErr;
       return { ok: true, appointment_id: appt.id, starts_at: appt.starts_at };
+    }
+    case "get_appointments": {
+      const { patient_id, scope } = params as { patient_id: string; scope?: "upcoming" | "past" | "all" };
+      const nowIso = new Date().toISOString();
+      let q = supabase
+        .from("appointments")
+        .select("id,starts_at,reason,status,insurance_snapshot,provider_id,providers(name,specialty,location,phone)")
+        .eq("patient_id", patient_id);
+      if (scope === "upcoming" || !scope) q = q.gte("starts_at", nowIso).order("starts_at", { ascending: true });
+      else if (scope === "past") q = q.lt("starts_at", nowIso).order("starts_at", { ascending: false });
+      else q = q.order("starts_at", { ascending: false });
+      const { data, error } = await q.limit(10);
+      if (error) throw error;
+      return { appointments: data ?? [] };
     }
     case "get_insurance_summary": {
       const { patient_id } = params as { patient_id: string };

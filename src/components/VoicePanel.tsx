@@ -25,7 +25,7 @@ export type Scenario = "new_booking" | "pt_followup" | "billing_explainer" | "re
 const SCENARIO_LABEL: Record<Scenario, string> = {
   new_booking: "Mara calling the doctor's office",
   pt_followup: "Physical therapy follow-up",
-  billing_explainer: "Talk with Mara",
+  billing_explainer: "Talk to Marie",
   reminder: "Appointment reminder",
 };
 
@@ -35,7 +35,7 @@ const SCENARIO_OPENER: Record<Scenario, string> = {
   pt_followup:
     "Hi, this is Mara following up after your physical therapy visit. Do you have a couple of minutes for a few quick questions?",
   billing_explainer:
-    "Hi, this is Mara. I'm here to talk through anything on your mind — a bill, an upcoming appointment, or a procedure. What would you like to start with?",
+    "Hi, this is Marie. I can help with your bills, insurance, upcoming appointments, or procedures. What would you like to start with?",
 
   reminder:
     "Hi, this is Mara — a friendly reminder about your upcoming visit. Would you like to confirm, reschedule, or have me answer any questions about it?",
@@ -78,6 +78,8 @@ function VoicePanelInner({ patient, scenario, context, onClose }: Props) {
       check_availability: (p) => runToolForAgent("check_availability", p, patient.id),
       book_appointment: (p) =>
         runToolForAgent("book_appointment", { ...p, patient_id: patient.id }, patient.id),
+      get_appointments: (p) =>
+        runToolForAgent("get_appointments", { ...p, patient_id: patient.id }, patient.id),
       get_insurance_summary: (p) =>
         runToolForAgent("get_insurance_summary", { ...p, patient_id: patient.id }, patient.id),
       get_billing_summary: (p) =>
@@ -299,7 +301,9 @@ function VoicePanelInner({ patient, scenario, context, onClose }: Props) {
             <div className="mt-1 text-lg font-semibold">
               {scenario === "new_booking"
                 ? `Mara is calling the office on behalf of ${patient.full_name}`
-                : `Talking to Mara — on behalf of ${patient.full_name}`}
+                : scenario === "billing_explainer"
+                  ? `Talking to Marie — on behalf of ${patient.full_name}`
+                  : `Talking to Mara — on behalf of ${patient.full_name}`}
             </div>
           </div>
           <VoiceOrb active={isConnected} speaking={isSpeaking} />
@@ -326,7 +330,7 @@ function VoicePanelInner({ patient, scenario, context, onClose }: Props) {
           {isConnected && (
             <div className="flex items-center gap-1 rounded-md bg-background px-3 py-2 text-sm text-muted-foreground">
               {isSpeaking ? <Mic className="h-4 w-4 text-primary" /> : <MicOff className="h-4 w-4" />}
-              {isSpeaking ? "Mara is speaking" : "Listening"}
+              {isSpeaking ? `${scenario === "billing_explainer" ? "Marie" : "Mara"} is speaking` : "Listening"}
             </div>
           )}
           {scenario === "billing_explainer" && (
@@ -383,7 +387,7 @@ function VoicePanelInner({ patient, scenario, context, onClose }: Props) {
                         <Loader2 className="h-3 w-3 animate-spin" /> Analyzing…
                       </span>
                     )}
-                    {a.status === "ready" && "Shared with Mara"}
+                    {a.status === "ready" && "Shared with Marie"}
                     {a.status === "error" && <span className="text-destructive">Failed</span>}
                   </div>
                 </div>
@@ -415,8 +419,8 @@ function VoicePanelInner({ patient, scenario, context, onClose }: Props) {
           {transcript.length === 0 && (
             <div className="text-sm text-muted-foreground">
               {isConnected
-                ? "Listening… speak naturally. Mara will reply out loud."
-                : "Press Start call to begin. You'll hear Mara through your speakers."}
+                ? `Listening… speak naturally. ${scenario === "billing_explainer" ? "Marie" : "Mara"} will reply out loud.`
+                : `Press Start call to begin. You'll hear ${scenario === "billing_explainer" ? "Marie" : "Mara"} through your speakers.`}
             </div>
           )}
           {transcript.map((t, i) => (
@@ -430,7 +434,7 @@ function VoicePanelInner({ patient, scenario, context, onClose }: Props) {
               )}
             >
               <div className="mb-0.5 text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                {t.role === "agent" ? "Mara" : patient.full_name}
+                {t.role === "agent" ? (scenario === "billing_explainer" ? "Marie" : "Mara") : patient.full_name}
               </div>
               {t.text}
             </div>
