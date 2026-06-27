@@ -301,7 +301,9 @@ function VoicePanelInner({ patient, scenario, context, onClose }: Props) {
             <div className="mt-1 text-lg font-semibold">
               {scenario === "new_booking"
                 ? `Mara is calling the office on behalf of ${patient.full_name}`
-                : `Talking to Mara — on behalf of ${patient.full_name}`}
+                : scenario === "billing_explainer"
+                  ? `Talking to Marie — on behalf of ${patient.full_name}`
+                  : `Talking to Mara — on behalf of ${patient.full_name}`}
             </div>
           </div>
           <VoiceOrb active={isConnected} speaking={isSpeaking} />
