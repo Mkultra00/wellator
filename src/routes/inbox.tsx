@@ -83,7 +83,13 @@ const STATUS_META: Record<
     tone: "border-destructive text-destructive",
     icon: XCircle,
   },
+  needs_human: {
+    label: "Escalated to human coordinator",
+    tone: "border-amber-600 text-amber-800",
+    icon: AlertCircle,
+  },
 };
+
 
 function parseOutcome(raw: string | null): OutcomeInfo {
   if (!raw) return {};
