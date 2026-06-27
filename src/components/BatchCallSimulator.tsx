@@ -71,15 +71,26 @@ export function BatchCallSimulator({ patient, providers, preferences, onReset, o
     providers.map((p) => ({ provider: p, status: "queued", turns: [], revealed: 0 })),
   );
   const [activeIdx, setActiveIdx] = useState(0);
-  const [phase, setPhase] = useState<"idle" | "running" | "finished">("idle");
+  const [phase, setPhase] = useState<"idle" | "running" | "finished" | "confirming" | "confirmed">(
+    "idle",
+  );
   const [confirmedIdx, setConfirmedIdx] = useState<number | null>(null);
+  const [confirmTurns, setConfirmTurns] = useState<ConfirmTurn[]>([]);
+  const [confirmRevealed, setConfirmRevealed] = useState(0);
+  const [emailSent, setEmailSent] = useState<null | {
+    to: string;
+    subject: string;
+    body: string;
+  }>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const cancelRef = useRef(false);
   const [ctx, setCtx] = useState<{ referring_doctor: string | null; insurance: any } | null>(null);
 
   const genDialog = useServerFn(generateBookingDialog);
+  const genConfirm = useServerFn(generatePatientConfirmDialog);
   const tts = useServerFn(synthesizeVoice);
   const fetchCtx = useServerFn(getBookingContext);
+
 
   useEffect(() => {
     fetchCtx({ data: { patient_id: patient.id } })
