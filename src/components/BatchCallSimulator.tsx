@@ -126,6 +126,7 @@ export function BatchCallSimulator({ patient, providers, preferences, onReset, o
   }>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const cancelRef = useRef(false);
+  const callsRef = useRef<CallState[]>([]);
   const cleanupTimerRef = useRef<number | null>(null);
   const ttsFailedOnceRef = useRef(false);
   const [escalations, setEscalations] = useState<
