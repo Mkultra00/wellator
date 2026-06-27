@@ -1503,3 +1503,129 @@ function OutcomeBadge({
     </Badge>
   );
 }
+
+function ConfirmedSchedule({
+  patientName,
+  calls,
+}: {
+  patientName: string;
+  calls: CallState[];
+}) {
+  const accepted = calls.filter(
+    (c) => c.decision === "accepted" && c.outcome?.kind === "offered",
+  );
+  const [reminders, setReminders] = useState<
+    Record<string, { dayBefore: boolean; dayOf: boolean }>
+  >(() =>
+    Object.fromEntries(
+      accepted.map((c) => [c.provider.id, { dayBefore: true, dayOf: true }]),
+    ),
+  );
+
+  // Keep reminders state in sync if accepted list changes
+  useEffect(() => {
+    setReminders((prev) => {
+      const next = { ...prev };
+      for (const c of accepted) {
+        if (!next[c.provider.id]) next[c.provider.id] = { dayBefore: true, dayOf: true };
+      }
+      return next;
+    });
+  }, [accepted.map((c) => c.provider.id).join(",")]);
+
+  if (accepted.length === 0) return null;
+
+  function toggle(id: string, key: "dayBefore" | "dayOf", value: boolean) {
+    setReminders((prev) => ({
+      ...prev,
+      [id]: { ...(prev[id] ?? { dayBefore: true, dayOf: true }), [key]: value },
+    }));
+    toast.success(
+      `${key === "dayBefore" ? "Day-before" : "Day-of"} reminder ${value ? "on" : "off"}`,
+    );
+  }
+
+  return (
+    <div className="border-t-2 border-emerald-500/40 bg-emerald-50/40 p-4 dark:bg-emerald-950/20">
+      <div className="mb-3 flex items-center gap-2">
+        <CalendarClock className="h-4 w-4 text-emerald-700 dark:text-emerald-400" />
+        <div className="text-sm font-semibold uppercase tracking-wider text-emerald-800 dark:text-emerald-300">
+          {patientName}'s confirmed schedule
+        </div>
+        <Badge variant="secondary" className="text-xs">
+          {accepted.length} appointment{accepted.length === 1 ? "" : "s"}
+        </Badge>
+      </div>
+
+      <div className="space-y-3">
+        {accepted.map((c) => {
+          const slot = (c.outcome as { slot: string }).slot;
+          const address = c.provider.clinic_address || c.provider.location;
+          const r = reminders[c.provider.id] ?? { dayBefore: true, dayOf: true };
+          return (
+            <div
+              key={c.provider.id}
+              className="rounded-md border border-emerald-500/40 bg-background p-3"
+            >
+              <div className="flex flex-wrap items-start justify-between gap-2">
+                <div className="min-w-0">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="font-semibold">{c.provider.name}</span>
+                    <Badge variant="secondary" className="text-xs">
+                      {c.provider.specialty}
+                    </Badge>
+                  </div>
+                  <div className="mt-1 flex items-center gap-1.5 text-sm">
+                    <CalendarClock className="h-3.5 w-3.5 text-muted-foreground" />
+                    <span className="font-medium">{slot}</span>
+                  </div>
+                  <div className="mt-0.5 flex items-start gap-1.5 text-xs text-muted-foreground">
+                    <MapPin className="mt-0.5 h-3 w-3 shrink-0" />
+                    <span>{address}</span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="mt-3 grid gap-2 border-t border-border pt-3 sm:grid-cols-2">
+                <label className="flex items-center justify-between gap-3 rounded border border-border bg-muted/40 px-3 py-2">
+                  <span className="flex items-center gap-2 text-xs">
+                    <BellRing className="h-3.5 w-3.5 text-primary" />
+                    <span>
+                      <div className="font-medium">Day-before reminder</div>
+                      <div className="text-[10px] text-muted-foreground">
+                        Sent the evening before the visit
+                      </div>
+                    </span>
+                  </span>
+                  <Switch
+                    checked={r.dayBefore}
+                    onCheckedChange={(v) => toggle(c.provider.id, "dayBefore", v)}
+                  />
+                </label>
+                <label className="flex items-center justify-between gap-3 rounded border border-border bg-muted/40 px-3 py-2">
+                  <span className="flex items-center gap-2 text-xs">
+                    <BellRing className="h-3.5 w-3.5 text-primary" />
+                    <span>
+                      <div className="font-medium">Day-of reminder</div>
+                      <div className="text-[10px] text-muted-foreground">
+                        Sent 2 hours before the visit
+                      </div>
+                    </span>
+                  </span>
+                  <Switch
+                    checked={r.dayOf}
+                    onCheckedChange={(v) => toggle(c.provider.id, "dayOf", v)}
+                  />
+                </label>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      <div className="mt-3 text-[11px] italic text-emerald-800/80 dark:text-emerald-300/80">
+        Mara will call {patientName} with each enabled reminder.
+      </div>
+    </div>
+  );
+}
