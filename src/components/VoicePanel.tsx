@@ -419,8 +419,8 @@ function VoicePanelInner({ patient, scenario, context, onClose }: Props) {
           {transcript.length === 0 && (
             <div className="text-sm text-muted-foreground">
               {isConnected
-                ? "Listening… speak naturally. Mara will reply out loud."
-                : "Press Start call to begin. You'll hear Mara through your speakers."}
+                ? `Listening… speak naturally. ${scenario === "billing_explainer" ? "Marie" : "Mara"} will reply out loud.`
+                : `Press Start call to begin. You'll hear ${scenario === "billing_explainer" ? "Marie" : "Mara"} through your speakers.`}
             </div>
           )}
           {transcript.map((t, i) => (
@@ -434,7 +434,7 @@ function VoicePanelInner({ patient, scenario, context, onClose }: Props) {
               )}
             >
               <div className="mb-0.5 text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                {t.role === "agent" ? "Mara" : patient.full_name}
+                {t.role === "agent" ? (scenario === "billing_explainer" ? "Marie" : "Mara") : patient.full_name}
               </div>
               {t.text}
             </div>
