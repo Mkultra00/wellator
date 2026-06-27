@@ -90,6 +90,8 @@ export function BatchCallSimulator({ patient, providers, preferences, onReset, o
   const genConfirm = useServerFn(generatePatientConfirmDialog);
   const tts = useServerFn(synthesizeVoice);
   const fetchCtx = useServerFn(getBookingContext);
+  const persistCall = useServerFn(saveBookingCall);
+
 
 
   const startedRef = useRef(false);
