@@ -5,7 +5,7 @@
  * by the LLM as a short transcript per call, then spoken aloud turn-by-turn
  * with live transcript reveal. No human voice needed.
  */
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -88,7 +88,6 @@ export function BatchCallSimulator({ patient, providers, preferences, onReset, o
   }>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const cancelRef = useRef(false);
-  const [ctx, setCtx] = useState<{ referring_doctor: string | null; insurance: any } | null>(null);
   const [escalations, setEscalations] = useState<
     Array<{
       specialty: string;
@@ -109,16 +108,19 @@ export function BatchCallSimulator({ patient, providers, preferences, onReset, o
   const patientConfirmedRef = useRef(false);
   const startedRef = useRef(false);
 
-  useEffect(() => {
+  const bookingContext = useMemo(() => {
     const pp = patient.primary_provider;
-    setCtx({
+    return {
       referring_doctor: pp ? `${pp.name} (${pp.specialty})` : null,
-      insurance: patient.insurance,
-    });
+      insurance: patient.insurance ?? null,
+    };
+  }, [patient]);
+
+  useEffect(() => {
     fetchNetwork({ data: { patient_id: patient.id } })
       .then((r: any) => setNetwork({ specialists: r.specialists ?? [] }))
       .catch(() => setNetwork({ specialists: [] }));
-  }, [patient, fetchNetwork]);
+  }, [patient.id, fetchNetwork]);
 
 
   const allDone = phase === "finished" || phase === "confirming" || phase === "confirmed";
@@ -175,8 +177,8 @@ export function BatchCallSimulator({ patient, providers, preferences, onReset, o
           provider_name: provider.name,
           provider_specialty: provider.specialty,
           provider_location: provider.location,
-          referring_doctor: ctx?.referring_doctor ?? null,
-          insurance: ctx?.insurance ?? null,
+          referring_doctor: bookingContext.referring_doctor,
+          insurance: bookingContext.insurance,
           preferences: {
             preferred_locations: preferences.preferred_locations,
             days: preferences.days,
@@ -249,7 +251,7 @@ export function BatchCallSimulator({ patient, providers, preferences, onReset, o
   }
 
 
-  const runAll = useCallback(async () => {
+  async function runAll() {
     setPhase("running");
     cancelRef.current = false;
     for (let i = 0; i < providers.length; i++) {
@@ -259,15 +261,17 @@ export function BatchCallSimulator({ patient, providers, preferences, onReset, o
 
     }
     setPhase("finished");
-  }, [providers.length]);
+  }
 
-  // Auto-start as soon as the booking context is loaded.
+  // Auto-start after the patient profile context is available. Keep this tied
+  // directly to the current patient object so calls cannot use stale null PCP
+  // or insurance values from an earlier render.
   useEffect(() => {
-    if (ctx && !startedRef.current) {
+    if (!startedRef.current) {
       startedRef.current = true;
       runAll();
     }
-  }, [ctx, runAll]);
+  }, [bookingContext]);
 
   // After all office calls finish, if Mara secured any offers, call the patient
   // to read them out and confirm, then "email" the confirmation.
