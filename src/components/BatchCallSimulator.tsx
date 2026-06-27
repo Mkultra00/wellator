@@ -191,7 +191,35 @@ export function BatchCallSimulator({ patient, providers, preferences, onReset, o
     setCalls((prev) =>
       prev.map((c, i) => (i === idx ? { ...c, status: "done", outcome: dialog.outcome } : c)),
     );
+
+    // Persist to call_logs so the inbox can show transcripts + status.
+    persistCall({
+      data: {
+        patient_id: patient.id,
+        scenario: "booking_call",
+        transcript: dialog.turns.map((t) => ({
+          speaker: t.speaker,
+          who: t.speaker === "mara" ? "Mara" : `${provider.name} office`,
+          text: t.text,
+        })),
+        outcome: JSON.stringify({
+          kind: dialog.outcome.kind,
+          slot: dialog.outcome.kind === "offered" ? (dialog.outcome as any).slot : null,
+          provider_id: provider.id,
+          provider_name: provider.name,
+          provider_specialty: provider.specialty,
+          provider_location: provider.location,
+          status:
+            dialog.outcome.kind === "offered"
+              ? "booked"
+              : dialog.outcome.kind === "voicemail"
+                ? "needs_more_info"
+                : "no_availability",
+        }),
+      },
+    }).catch(() => {});
   }
+
 
   const runAll = useCallback(async () => {
     setPhase("running");
