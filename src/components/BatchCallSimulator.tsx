@@ -27,6 +27,8 @@ import {
   generateBookingDialog,
   generatePatientConfirmDialog,
   synthesizeVoice,
+  MARA_VOICE_ID,
+  pickOfficeVoice,
   type ConfirmTurn,
   type DialogTurn,
   type DialogOutcome,
@@ -70,6 +72,10 @@ type Props = {
   onClose: () => void;
 };
 
+const DIALOG_TIMEOUT_MS = 3000;
+const TTS_TIMEOUT_MS = 3000;
+const AUDIO_TIMEOUT_MS = 6000;
+
 export function BatchCallSimulator({ patient, providers, preferences, onReset, onClose }: Props) {
   const [calls, setCalls] = useState<CallState[]>(() =>
     providers.map((p) => ({ provider: p, status: "queued", turns: [], revealed: 0 })),
@@ -88,6 +94,7 @@ export function BatchCallSimulator({ patient, providers, preferences, onReset, o
   }>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const cancelRef = useRef(false);
+  const cleanupTimerRef = useRef<number | null>(null);
   const ttsFailedOnceRef = useRef(false);
   const [escalations, setEscalations] = useState<
     Array<{
@@ -142,18 +149,71 @@ export function BatchCallSimulator({ patient, providers, preferences, onReset, o
   }, [allDone, calls, preferences]);
 
   useEffect(() => {
+    if (cleanupTimerRef.current != null) {
+      window.clearTimeout(cleanupTimerRef.current);
+      cleanupTimerRef.current = null;
+    }
+    cancelRef.current = false;
     return () => {
-      cancelRef.current = true;
-      audioRef.current?.pause();
+      // React StrictMode runs effect cleanup once immediately after mount in
+      // dev. Delay the real cancel by one tick so the second StrictMode setup
+      // can clear it; actual unmounts still stop any in-flight mock call.
+      cleanupTimerRef.current = window.setTimeout(() => {
+        cancelRef.current = true;
+        audioRef.current?.pause();
+      }, 0);
     };
   }, []);
+
+  function speakWithBrowser(text: string, speaker: "mara" | "office" | "patient"): Promise<void> {
+    return new Promise((resolve) => {
+      if (typeof window === "undefined" || !("speechSynthesis" in window)) {
+        resolve();
+        return;
+      }
+      try {
+        window.speechSynthesis.cancel();
+        const utterance = new SpeechSynthesisUtterance(text);
+        utterance.rate = speaker === "mara" ? 0.92 : 0.98;
+        utterance.pitch = speaker === "mara" ? 1.05 : 0.96;
+        const voices = window.speechSynthesis.getVoices();
+        const preferred = voices.find((v) => /female|samantha|victoria|karen|zira/i.test(v.name));
+        if (speaker === "mara" && preferred) utterance.voice = preferred;
+        let done = false;
+        const finish = () => {
+          if (done) return;
+          done = true;
+          resolve();
+        };
+        utterance.onend = finish;
+        utterance.onerror = finish;
+        window.setTimeout(finish, Math.min(2500, Math.max(1200, text.length * 18)));
+        window.speechSynthesis.speak(utterance);
+      } catch {
+        resolve();
+      }
+    });
+  }
 
   function playAudio(base64: string): Promise<void> {
     return new Promise((resolve) => {
       const audio = new Audio(`data:audio/mpeg;base64,${base64}`);
       audioRef.current = audio;
-      audio.onended = () => resolve();
-      audio.onerror = () => resolve();
+      let done = false;
+      const finish = () => {
+        if (done) return;
+        done = true;
+        resolve();
+      };
+      const timer = window.setTimeout(finish, AUDIO_TIMEOUT_MS);
+      audio.onended = () => {
+        window.clearTimeout(timer);
+        finish();
+      };
+      audio.onerror = () => {
+        window.clearTimeout(timer);
+        finish();
+      };
       audio.play().catch(() => resolve());
     });
   }
@@ -164,7 +224,7 @@ export function BatchCallSimulator({ patient, providers, preferences, onReset, o
     try {
       const result = await Promise.race([
         tts({ data: { text, voice_id: voiceId } }),
-        new Promise<never>((_, rej) => setTimeout(() => rej(new Error("TTS client timeout (10s)")), 10000)),
+        new Promise<never>((_, rej) => setTimeout(() => rej(new Error("TTS client timeout")), TTS_TIMEOUT_MS)),
       ]);
       return result as { audio_base64: string };
     } catch (e) {
@@ -180,6 +240,35 @@ export function BatchCallSimulator({ patient, providers, preferences, onReset, o
 
   type PreparedDialog = Awaited<ReturnType<typeof genDialog>>;
 
+  function fallbackDialog(provider: PickedProvider, reason: string): PreparedDialog {
+    const firstName = patient.full_name.split(" ")[0];
+    const insurance = bookingContext.insurance;
+    const insuranceLine = insurance?.payer
+      ? `${insurance.payer}${insurance.plan ? ` (${insurance.plan})` : ""}${insurance.member_id ? `, member ID ${insurance.member_id}` : ""}`
+      : "insurance on file";
+    const referrer = bookingContext.referring_doctor ?? "the primary care provider on file";
+    const prefTime = preferences.time_of_day.length ? preferences.time_of_day.join(" or ") : "any time";
+    return {
+      turns: [
+        {
+          speaker: "mara",
+          text: `Hi, this is Mara, an AI care navigator calling on behalf of ${patient.full_name}. ${firstName} was referred by ${referrer}, and ${firstName}'s insurance is ${insuranceLine}. I'm calling to schedule a ${provider.specialty} appointment.`,
+        },
+        {
+          speaker: "office",
+          text: `Thanks for calling. I can't complete the scheduling check right now, but I can take a message for ${provider.name}'s scheduling team.`,
+        },
+        {
+          speaker: "mara",
+          text: `Please note the patient prefers ${prefTime} on ${preferences.days.join(", ") || "any weekday"}, within ${preferences.max_distance_miles} miles. Please call back with available times.`,
+        },
+      ],
+      outcome: { kind: "voicemail" },
+      office_voice_id: pickOfficeVoice(provider.name),
+      mara_voice_id: MARA_VOICE_ID,
+    } as PreparedDialog;
+  }
+
   async function prepareDialog(
     provider: PickedProvider,
     opts?: { recall_reason?: string; previous_slot?: string | null },
@@ -187,48 +276,58 @@ export function BatchCallSimulator({ patient, providers, preferences, onReset, o
     const recallNote = opts?.recall_reason ? `Patient asked to reschedule — ${opts.recall_reason}` : null;
     const mergedNotes = [preferences.notes, recallNote].filter(Boolean).join(". ");
     try {
-      return await genDialog({
-        data: {
-          patient_name: patient.full_name,
-          patient_id: patient.id,
-          provider_name: provider.name,
-          provider_specialty: provider.specialty,
-          provider_location: provider.location,
-          referring_doctor: bookingContext.referring_doctor,
-          insurance: bookingContext.insurance,
-          preferences: {
-            preferred_locations: preferences.preferred_locations,
-            days: preferences.days,
-            time_of_day: preferences.time_of_day,
-            max_distance_miles: preferences.max_distance_miles,
-            notes: mergedNotes || preferences.notes,
+      return await Promise.race([
+        genDialog({
+          data: {
+            patient_name: patient.full_name,
+            patient_id: patient.id,
+            provider_name: provider.name,
+            provider_specialty: provider.specialty,
+            provider_location: provider.location,
+            referring_doctor: bookingContext.referring_doctor,
+            insurance: bookingContext.insurance,
+            preferences: {
+              preferred_locations: preferences.preferred_locations,
+              days: preferences.days,
+              time_of_day: preferences.time_of_day,
+              max_distance_miles: preferences.max_distance_miles,
+              notes: mergedNotes || preferences.notes,
+            },
+            recall_reason: opts?.recall_reason ?? null,
+            previous_slot: opts?.previous_slot ?? null,
           },
-          recall_reason: opts?.recall_reason ?? null,
-          previous_slot: opts?.previous_slot ?? null,
-        },
-      });
+        }),
+        new Promise<PreparedDialog>((resolve) =>
+          window.setTimeout(
+            () => resolve(fallbackDialog(provider, "dialog generation timeout")),
+            DIALOG_TIMEOUT_MS,
+          ),
+        ),
+      ]);
     } catch (e) {
-      toast.error(`Call to ${provider.name} failed`, {
+      toast.warning(`Using transcript-only fallback for ${provider.name}`, {
         description: e instanceof Error ? e.message : "Dialog generation failed",
       });
-      return null;
+      return fallbackDialog(provider, e instanceof Error ? e.message : "dialog generation failed");
     }
   }
 
   async function playDialog(idx: number, provider: PickedProvider, dialog: PreparedDialog) {
     setCalls((prev) =>
       prev.map((c, i) =>
-        i === idx ? { ...c, status: "live", turns: dialog.turns, revealed: 0 } : c,
+        // Show the transcript immediately. Audio services can be slow or
+        // blocked by browser autoplay rules, but the booking demo should never
+        // look blank while waiting for speech.
+        i === idx ? { ...c, status: "live", turns: dialog.turns, revealed: dialog.turns.length } : c,
       ),
     );
     for (let t = 0; t < dialog.turns.length; t++) {
       if (cancelRef.current) return;
       const turn = dialog.turns[t];
-      const voiceId = turn.speaker === "mara" ? dialog.mara_voice_id : dialog.office_voice_id;
-      const audio = await ttsWithTimeout(turn.text, voiceId);
-      setCalls((prev) => prev.map((c, i) => (i === idx ? { ...c, revealed: t + 1 } : c)));
-      if (audio) await playAudio(audio.audio_base64);
-      else await new Promise((r) => setTimeout(r, 500));
+      // For the mock booking batch, prioritize reliability: browser speech is
+      // available immediately after the user's click and cannot stall on a
+      // third-party TTS/network timeout. The transcript is already visible.
+      await speakWithBrowser(turn.text, turn.speaker);
     }
     setCalls((prev) =>
       prev.map((c, i) => (i === idx ? { ...c, status: "done", outcome: dialog.outcome } : c)),
@@ -285,15 +384,17 @@ export function BatchCallSimulator({ patient, providers, preferences, onReset, o
   async function runAll() {
     setPhase("running");
     cancelRef.current = false;
-    // Fan-out: kick off ALL booking dialogs in parallel so the first playback
-    // starts in ~one round-trip (~8-15s) instead of after N sequential gens.
-    const dialogPromises = providers.map((p, i) => prepareDialog(p).then((d) => ({ i, p, d })));
-    // Sequentially play whichever dialog finishes next, in provider order.
-    // Awaiting each promise in order keeps playback ordered while gen runs in parallel.
-    for (let i = 0; i < providers.length; i++) {
+    const pending = providers.map((p, i) => ({
+      i,
+      p,
+      promise: prepareDialog(p).then((d) => ({ i, p, d })),
+    }));
+    while (pending.length > 0) {
       if (cancelRef.current) return;
+      const { i, d } = await Promise.race(pending.map((item) => item.promise));
+      const doneIdx = pending.findIndex((item) => item.i === i);
+      if (doneIdx >= 0) pending.splice(doneIdx, 1);
       setActiveIdx(i);
-      const { d } = await dialogPromises[i];
       if (cancelRef.current) return;
       if (!d) {
         setCalls((prev) =>
@@ -360,10 +461,10 @@ export function BatchCallSimulator({ patient, providers, preferences, onReset, o
         if (cancelRef.current || cancelled) return;
         const turn = confirm.turns[t];
         const voiceId = turn.speaker === "mara" ? confirm.mara_voice_id : confirm.patient_voice_id;
-        const audio = await ttsWithTimeout(turn.text, voiceId);
         setConfirmRevealed(t + 1);
+        const audio = await ttsWithTimeout(turn.text, voiceId);
         if (audio) await playAudio(audio.audio_base64);
-        else await new Promise((r) => setTimeout(r, 500));
+        else await speakWithBrowser(turn.text, turn.speaker);
       }
       if (cancelled) return;
       patientConfirmedRef.current = true;
@@ -611,6 +712,12 @@ export function BatchCallSimulator({ patient, providers, preferences, onReset, o
     toast(`Cancelled ${calls[i].provider.name}. Pick another doctor from the list.`);
   }
 
+  function stopAnd(next: () => void) {
+    cancelRef.current = true;
+    audioRef.current?.pause();
+    next();
+  }
+
 
   return (
     <Card className="overflow-hidden border-2">
@@ -629,10 +736,10 @@ export function BatchCallSimulator({ patient, providers, preferences, onReset, o
           </div>
         </div>
         <div className="flex gap-2">
-          <Button variant="ghost" size="sm" onClick={onReset} className="gap-1">
+          <Button variant="ghost" size="sm" onClick={() => stopAnd(onReset)} className="gap-1">
             <ArrowLeft className="h-4 w-4" /> New batch
           </Button>
-          <Button variant="outline" size="sm" onClick={onClose}>
+          <Button variant="outline" size="sm" onClick={() => stopAnd(onClose)}>
             Close
           </Button>
         </div>
@@ -673,7 +780,7 @@ export function BatchCallSimulator({ patient, providers, preferences, onReset, o
           onAccept={confirmBooking}
           onRecall={recallOne}
           onCancel={cancelOne}
-          onPickMore={onReset}
+          onPickMore={() => stopAnd(onReset)}
         />
       )}
 
@@ -997,6 +1104,7 @@ function CallRow({
 }) {
   const { provider, status, outcome, turns, revealed } = call;
   const visibleTurns = turns.slice(0, revealed);
+  const isWaitingForTranscript = isActive && visibleTurns.length === 0;
   return (
     <div
       className={cn(
@@ -1041,8 +1149,16 @@ function CallRow({
         </div>
       </div>
 
-      {visibleTurns.length > 0 && (
+      {(visibleTurns.length > 0 || isWaitingForTranscript) && (
         <div className="mt-3 space-y-2 rounded-md border border-border bg-background p-3">
+          {isWaitingForTranscript && (
+            <div className="rounded bg-primary/10 px-2 py-1.5 text-sm">
+              <div className="mb-0.5 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+                Mara (for {patientName})
+              </div>
+              Calling {provider.name}'s office now… if the AI voice service is slow, Mara will switch to a transcript-only fallback in a few seconds.
+            </div>
+          )}
           {visibleTurns.map((t, idx) => (
             <div
               key={idx}
