@@ -724,6 +724,21 @@ export function BatchCallSimulator({ patient, providers, preferences, onReset, o
 
 
   function confirmBooking(i: number) {
+    const target = calls[i];
+    const targetSlot = target.outcome?.kind === "offered" ? (target.outcome as { slot: string }).slot : null;
+    const conflict = calls.find(
+      (c, idx) =>
+        idx !== i &&
+        c.decision === "accepted" &&
+        c.outcome?.kind === "offered" &&
+        slotsOverlap(targetSlot, (c.outcome as { slot: string }).slot),
+    );
+    if (conflict) {
+      toast.error(
+        `Time conflict with ${conflict.provider.name} (${(conflict.outcome as { slot: string }).slot}). Recall this office for a different time.`,
+      );
+      return;
+    }
     setConfirmedIdx(i);
     setCalls((prev) => prev.map((c, idx) => (idx === i ? { ...c, decision: "accepted" } : c)));
     toast.success(`Appointment confirmed with ${calls[i].provider.name}`);
