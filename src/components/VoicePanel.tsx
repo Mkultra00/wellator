@@ -78,6 +78,8 @@ function VoicePanelInner({ patient, scenario, context, onClose }: Props) {
       check_availability: (p) => runToolForAgent("check_availability", p, patient.id),
       book_appointment: (p) =>
         runToolForAgent("book_appointment", { ...p, patient_id: patient.id }, patient.id),
+      get_appointments: (p) =>
+        runToolForAgent("get_appointments", { ...p, patient_id: patient.id }, patient.id),
       get_insurance_summary: (p) =>
         runToolForAgent("get_insurance_summary", { ...p, patient_id: patient.id }, patient.id),
       get_billing_summary: (p) =>
