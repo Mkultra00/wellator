@@ -6,10 +6,11 @@ import { ProviderPicker, type PickedProvider } from "@/components/ProviderPicker
 import { BookingPreferences, type BookingPrefs } from "@/components/BookingPreferences";
 import { BatchCallSimulator } from "@/components/BatchCallSimulator";
 import { usePatient } from "@/lib/patient-context";
+import { BookAppointmentIcon, TalkToMaraIcon } from "@/components/ColorfulIcons";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { CalendarPlus, FileText, ArrowRight, ArrowLeft } from "lucide-react";
+import { ArrowRight, ArrowLeft } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/")({
@@ -35,7 +36,7 @@ type CardDef = {
   id: Scenario;
   title: string;
   body: string;
-  Icon: typeof CalendarPlus;
+  Icon: typeof BookAppointmentIcon;
 };
 
 const CARDS: CardDef[] = [
@@ -43,14 +44,13 @@ const CARDS: CardDef[] = [
     id: "new_booking",
     title: "Book an appointment",
     body: "Pick every doctor you'd be willing to see — Mara batch-calls each office, compares availability against your preferences, and books the best match.",
-    Icon: CalendarPlus,
+    Icon: BookAppointmentIcon,
   },
   {
     id: "billing_explainer",
     title: "Talk to Mara",
     body: "Chat with Mara about billing, insurance, appointments, or procedures — and ask her how to use this app. She can walk you through booking a visit, checking scheduled calls, or anything else.",
-    Icon: FileText,
-
+    Icon: TalkToMaraIcon,
   },
 ];
 
@@ -128,9 +128,9 @@ function Index() {
                   )}
                 >
                   <div className="p-6">
-                    <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-primary/10 text-primary">
-                      <Icon className="h-6 w-6" />
-                    </div>
+                  <div className="flex h-20 w-20 items-center justify-center rounded-2xl bg-gradient-to-br from-primary/15 via-accent/10 to-secondary/15 shadow-sm">
+                    <Icon className="h-16 w-16" />
+                  </div>
                     <h2 className="mt-4 text-xl font-semibold text-foreground">{c.title}</h2>
                     <p className="mt-2 text-sm text-muted-foreground">{c.body}</p>
                     <div className="mt-4 flex items-center gap-1 text-sm font-medium text-primary opacity-0 transition-opacity group-hover:opacity-100">
