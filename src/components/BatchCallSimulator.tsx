@@ -467,7 +467,39 @@ export function BatchCallSimulator({ patient, providers, preferences, onReset, o
       }
       await playDialog(i, providers[i], dialog);
       if (dialog.outcome.kind === "offered") {
-        bookedSlots.push((dialog.outcome as { slot: string }).slot);
+        const offeredSlot = (dialog.outcome as { slot: string }).slot;
+        const conflictWith = bookedSlots.find((b) => slotsOverlap(offeredSlot, b));
+        if (conflictWith) {
+          // Office offered (and we "booked") a slot that collides with a
+          // previously secured appointment. Refuse it client-side so Mara
+          // never holds two overlapping/too-close visits in memory.
+          toast.warning(
+            `${providers[i].name} offered ${offeredSlot}, which conflicts with ${conflictWith}. Mara will call back for a different day or time.`,
+          );
+          setCalls((prev) =>
+            prev.map((c, idx) =>
+              idx === i
+                ? { ...c, outcome: { kind: "no_availability" }, decision: undefined }
+                : c,
+            ),
+          );
+          // Immediate callback with the busy slots so we get a clean offer.
+          await runOne(i, providers[i], {
+            recall_reason: `conflicts with the patient's existing appointment at ${conflictWith} — need a different day, or at least 60 minutes away on the same day`,
+            previous_slot: offeredSlot,
+            busy_slots: [...bookedSlots],
+          });
+          // Re-read the new outcome from state via a fresh ref-style read.
+          const fresh = callsRef.current[i]?.outcome;
+          if (fresh?.kind === "offered") {
+            const freshSlot = (fresh as { slot: string }).slot;
+            if (!bookedSlots.some((b) => slotsOverlap(freshSlot, b))) {
+              bookedSlots.push(freshSlot);
+            }
+          }
+        } else {
+          bookedSlots.push(offeredSlot);
+        }
       }
     }
     setPhase("finished");
