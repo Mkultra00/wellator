@@ -57,6 +57,8 @@ export function VoicePanel(props: Props) {
 }
 
 function VoicePanelInner({ patient, scenario, context, onClose }: Props) {
+  const panelRef = useRef<HTMLDivElement>(null);
+  const autoStartedRef = useRef(false);
 
   const [connecting, setConnecting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -191,6 +193,22 @@ function VoicePanelInner({ patient, scenario, context, onClose }: Props) {
     }
   }, [conversation, fetchToken, patient, scenario, context, agentVariant]);
 
+  // Auto-start "Talk with Mara" so the user doesn't press an extra button.
+  useEffect(() => {
+    if (scenario !== "billing_explainer") return;
+    if (autoStartedRef.current) return;
+    if (conversation.status !== "disconnected") return;
+    autoStartedRef.current = true;
+    start();
+  }, [scenario, conversation.status, start]);
+
+  // Scroll the call panel into view when the call connects.
+  useEffect(() => {
+    if (conversation.status === "connected") {
+      panelRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+    }
+  }, [conversation.status]);
+
   const handleFiles = useCallback(
     async (files: FileList | null) => {
       if (!files || files.length === 0) return;
@@ -266,7 +284,7 @@ function VoicePanelInner({ patient, scenario, context, onClose }: Props) {
   const isSpeaking = conversation.isSpeaking;
 
   return (
-    <Card className="overflow-hidden border-2">
+    <Card ref={panelRef} className="overflow-hidden border-2">
       <div
         className={cn(
           "flex flex-col gap-4 p-6 transition-colors",
