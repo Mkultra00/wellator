@@ -567,7 +567,7 @@ export function BatchCallSimulator({ patient, providers, preferences, onReset, o
         followups.push(`I'll find ${declined.size === 1 ? "an alternative doctor" : `${declined.size} alternative doctors`} from your referral list.`);
       if (bookable.length > 0)
         followups.push(`I'll add ${bookable.length} test${bookable.length === 1 ? "" : "s"} (lab/imaging) to your booking list so I can schedule those too.`);
-      const body = `Hi ${patient.full_name.split(" ")[0]},\n\nThis is Mara following up on our call. Here's what we lined up:\n\n${lines || "(none yet — see below)"}\n\n${followups.join(" ")}\n\nReply YES to confirm, or call us back any time.\n\n— Mara, your care navigator`;
+      const body = `Hi ${patient.full_name.split(" ")[0]},\n\nI hope you're doing well. This is Mara following up on our call — thank you so much for your time. Here's what we were able to line up for you:\n\n${lines || "(none yet — see below)"}\n\n${followups.join(" ")}\n\nIf you have any questions or if anything needs to change, please don't hesitate to reach out. We're here to help.\n\nWith care,\n— Mara, your care navigator`;
       setEmailSent({
         to: `${patient.full_name.toLowerCase().replace(/\s+/g, ".")}@example.com`,
         subject,
