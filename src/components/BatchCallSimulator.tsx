@@ -73,8 +73,10 @@ type Props = {
 };
 
 const DIALOG_TIMEOUT_MS = 3000;
-const TTS_TIMEOUT_MS = 3000;
-const AUDIO_TIMEOUT_MS = 6000;
+const TTS_TIMEOUT_MS = 8000;
+// Safety cap only — actual end is detected via `onended`.
+const AUDIO_MAX_MS = 60000;
+const TURN_GAP_MS = 250;
 
 export function BatchCallSimulator({ patient, providers, preferences, onReset, onClose }: Props) {
   const [calls, setCalls] = useState<CallState[]>(() =>
@@ -197,6 +199,13 @@ export function BatchCallSimulator({ patient, providers, preferences, onReset, o
 
   function playAudio(base64: string): Promise<void> {
     return new Promise((resolve) => {
+      // Stop any prior audio or browser TTS so voices never overlap.
+      try { audioRef.current?.pause(); } catch {}
+      try {
+        if (typeof window !== "undefined" && "speechSynthesis" in window) {
+          window.speechSynthesis.cancel();
+        }
+      } catch {}
       const audio = new Audio(`data:audio/mpeg;base64,${base64}`);
       audioRef.current = audio;
       let done = false;
@@ -205,7 +214,7 @@ export function BatchCallSimulator({ patient, providers, preferences, onReset, o
         done = true;
         resolve();
       };
-      const timer = window.setTimeout(finish, AUDIO_TIMEOUT_MS);
+      const timer = window.setTimeout(finish, AUDIO_MAX_MS);
       audio.onended = () => {
         window.clearTimeout(timer);
         finish();
@@ -214,7 +223,10 @@ export function BatchCallSimulator({ patient, providers, preferences, onReset, o
         window.clearTimeout(timer);
         finish();
       };
-      audio.play().catch(() => resolve());
+      audio.play().catch(() => {
+        window.clearTimeout(timer);
+        finish();
+      });
     });
   }
 
@@ -328,6 +340,7 @@ export function BatchCallSimulator({ patient, providers, preferences, onReset, o
       const audio = await ttsWithTimeout(turn.text, voiceId);
       if (audio) await playAudio(audio.audio_base64);
       else await speakWithBrowser(turn.text, turn.speaker);
+      if (t < dialog.turns.length - 1) await new Promise((r) => setTimeout(r, TURN_GAP_MS));
     }
     setCalls((prev) =>
       prev.map((c, i) => (i === idx ? { ...c, status: "done", outcome: dialog.outcome } : c)),
@@ -465,6 +478,7 @@ export function BatchCallSimulator({ patient, providers, preferences, onReset, o
         const audio = await ttsWithTimeout(turn.text, voiceId);
         if (audio) await playAudio(audio.audio_base64);
         else await speakWithBrowser(turn.text, turn.speaker);
+        if (t < confirm.turns.length - 1) await new Promise((r) => setTimeout(r, TURN_GAP_MS));
       }
       if (cancelled) return;
       patientConfirmedRef.current = true;
