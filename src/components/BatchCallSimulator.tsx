@@ -360,13 +360,10 @@ export function BatchCallSimulator({ patient, providers, preferences, onReset, o
         if (cancelRef.current || cancelled) return;
         const turn = confirm.turns[t];
         const voiceId = turn.speaker === "mara" ? confirm.mara_voice_id : confirm.patient_voice_id;
-        let audio: { audio_base64: string } | null = null;
-        try {
-          audio = await tts({ data: { text: turn.text, voice_id: voiceId } });
-        } catch {}
+        const audio = await ttsWithTimeout(turn.text, voiceId);
         setConfirmRevealed(t + 1);
         if (audio) await playAudio(audio.audio_base64);
-        else await new Promise((r) => setTimeout(r, 600));
+        else await new Promise((r) => setTimeout(r, 500));
       }
       if (cancelled) return;
       patientConfirmedRef.current = true;
