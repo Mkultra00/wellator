@@ -342,18 +342,7 @@ export const generatePatientConfirmDialog = createServerFn({ method: "POST" })
       .join("\n");
     const user = `Patient: ${data.patient_name}\nOffers secured:\n${offerLines}`;
 
-    const res = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "Lovable-API-Key": apiKey },
-      body: JSON.stringify({
-        model: "google/gemini-3.5-flash",
-        messages: [
-          { role: "system", content: system },
-          { role: "user", content: user },
-        ],
-        response_format: { type: "json_object" },
-      }),
-    });
+    const res = await callLLM(apiKey, system, user);
     if (!res.ok) {
       const t = await res.text().catch(() => "");
       console.warn(`[generatePatientConfirmDialog] Gateway ${res.status}: ${t}`);
