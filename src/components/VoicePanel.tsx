@@ -21,11 +21,10 @@ import avatarAsset from "@/assets/mara-avatar.png.asset.json";
 
 type Turn = { role: "user" | "agent"; text: string; at: string };
 
-export type Scenario = "new_booking" | "pt_followup" | "billing_explainer" | "reminder";
+export type Scenario = "new_booking" | "billing_explainer" | "reminder";
 
 const SCENARIO_LABEL: Record<Scenario, string> = {
   new_booking: "Mara calling the doctor's office",
-  pt_followup: "Physical therapy follow-up",
   billing_explainer: "Talk to Mara",
   reminder: "Appointment reminder",
 };
@@ -33,8 +32,6 @@ const SCENARIO_LABEL: Record<Scenario, string> = {
 const SCENARIO_OPENER: Record<Scenario, string> = {
   new_booking:
     "Hi, this is Mara, an AI care navigator calling on behalf of a patient. I'd like to book a new appointment with one of your providers. Do you have a moment?",
-  pt_followup:
-    "Hi, this is Mara following up after your physical therapy visit. Do you have a couple of minutes for a few quick questions?",
   billing_explainer:
     "Hi, this is Mara. I can help with your bills, insurance, upcoming appointments, or procedures — and I can also explain how to use this app or answer questions about how it works. What would you like to start with?",
 
