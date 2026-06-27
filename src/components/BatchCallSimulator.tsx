@@ -64,8 +64,12 @@ function scoreOutcome(o: DialogOutcome | undefined, prefs: BookingPrefs, provide
 }
 
 // Parse a slot like "Tuesday, July 16 at 10:15 AM" into a sortable timestamp.
-// Returns null if it can't be parsed. Assumes 60-minute visit duration.
+// Visits are 60 minutes and must be spaced at least 60 minutes apart on the
+// same day, so we treat each slot as occupying a 120-minute window for
+// conflict-detection purposes (visit + buffer).
 const VISIT_MIN = 60;
+const GAP_MIN = 60;
+const BLOCK_MIN = VISIT_MIN + GAP_MIN;
 function parseSlot(slot: string | null | undefined): { start: number; end: number; label: string } | null {
   if (!slot) return null;
   const m = slot.match(/([A-Za-z]+),?\s+([A-Za-z]+)\s+(\d{1,2})(?:,\s*(\d{4}))?\s+at\s+(\d{1,2}):(\d{2})\s*([AaPp][Mm])/);
@@ -82,10 +86,12 @@ function parseSlot(slot: string | null | undefined): { start: number; end: numbe
   return { start, end: start + VISIT_MIN * 60_000, label: slot };
 }
 
+// True when two slots are on the same day AND their start times are < 60 min
+// of buffer apart (i.e. visits overlap or there isn't a full hour between them).
 function slotsOverlap(a: string | null | undefined, b: string | null | undefined): boolean {
   const pa = parseSlot(a); const pb = parseSlot(b);
   if (!pa || !pb) return false;
-  return pa.start < pb.end && pb.start < pa.end;
+  return Math.abs(pa.start - pb.start) < BLOCK_MIN * 60_000;
 }
 
 type Props = {
