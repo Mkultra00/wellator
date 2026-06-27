@@ -29,6 +29,7 @@ export function pickOfficeVoice(seed: string) {
 export const MARA_VOICE_ID = MARA_VOICE;
 
 const DialogInput = z.object({
+  patient_id: z.string().min(1).optional(),
   patient_name: z.string(),
   provider_name: z.string(),
   provider_specialty: z.string(),
@@ -77,11 +78,36 @@ export type DialogOutcome =
   | { kind: "voicemail" }
   | { kind: "no_availability" };
 
+async function loadDemoPatientContext(patientId?: string) {
+  if (!patientId) return null;
+  const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+  const { data, error } = await supabaseAdmin
+    .from("patients")
+    .select(
+      "primary_provider:providers!patients_primary_provider_id_fkey(name,specialty),insurance_profiles(payer,plan,member_id,group_id,referral_required)",
+    )
+    .eq("id", patientId)
+    .maybeSingle();
+  if (error || !data) return null;
+  const primary = (data as any).primary_provider;
+  const insuranceProfiles = (data as any).insurance_profiles;
+  return {
+    referring_doctor: primary ? `${primary.name} (${primary.specialty})` : null,
+    insurance: Array.isArray(insuranceProfiles)
+      ? insuranceProfiles[0] ?? null
+      : insuranceProfiles ?? null,
+  };
+}
+
 export const generateBookingDialog = createServerFn({ method: "POST" })
   .inputValidator((d) => DialogInput.parse(d))
   .handler(async ({ data }) => {
     const apiKey = process.env.LOVABLE_API_KEY;
     if (!apiKey) throw new Error("LOVABLE_API_KEY not configured");
+
+    const demoContext = await loadDemoPatientContext(data.patient_id);
+    const referringDoctor = demoContext?.referring_doctor ?? data.referring_doctor ?? null;
+    const insurance = demoContext?.insurance ?? data.insurance ?? null;
 
     const prefs = data.preferences;
     const prefLine = `Preferred ${prefs.time_of_day ?? "any time"} on ${
@@ -94,31 +120,30 @@ export const generateBookingDialog = createServerFn({ method: "POST" })
 
 CRITICAL FACT-USE RULES — do NOT invent or alter patient facts:
 - Use the patient name, referring primary care doctor, insurance payer, plan, and member id EXACTLY as given in the user message. Copy them verbatim — never substitute other doctor names, payers (Aetna/BCBS/UHC/Medicare/etc.), or plan names.
-- If a field is marked "not on file" or "self-referral", say that — do not make one up.
-- If the user message contains a referring doctor or insurance line, Mara must NEVER say self-referred, no insurance, or insurance not on file anywhere in the transcript.
+- For this demo, every patient has referral and insurance information on the profile. Mara must NEVER say self-referred, no referrer, no insurance, or insurance not on file anywhere in the transcript.
 - Mara's FIRST turn MUST use the prebuilt OPENING_LINE provided in the user message verbatim. You may append one short sentence requesting the appointment, but do not change the patient/PCP/insurance wording.
 
 If this is a CALLBACK (the user prompt will say so), Mara's opening instead references the previously offered slot, explains the patient asked to reschedule with the reason (day vs time), and asks for an alternative — still using the exact patient name, PCP, and insurance from the user message.
 
 When the office OFFERS a slot, BEFORE the call wraps Mara must ask: "Is there anything the patient should bring or have done before the visit — referral, recent records, bloodwork, imaging, EKG?" The receptionist answers with 1-4 specific prep items appropriate to the specialty (e.g. cardiology often wants a recent EKG + lipid panel; orthopedics wants recent imaging of the affected joint; GI may want fasting bloodwork; many want a referral from PCP + photo ID + insurance card + medication list). Encode each in outcome.prep; bookable=true ONLY if it needs a separate appointment elsewhere (lab draw, imaging center, outpatient EKG). If the specialist will do it in-office, use category "in_office" and bookable=false. Otherwise: no availability for ~2 weeks, or voicemail (1-2 turns, no prep). Vary outcomes ~65% offered / ~20% no_availability / ~15% voicemail.`;
 
-    const payer = data.insurance?.payer ?? null;
-    const plan = data.insurance?.plan ?? null;
-    const memberId = data.insurance?.member_id ?? null;
-    const referralReq = data.insurance?.referral_required ? " Referral is required under this plan." : "";
+    const payer = insurance?.payer ?? null;
+    const plan = insurance?.plan ?? null;
+    const memberId = insurance?.member_id ?? null;
+    const referralReq = insurance?.referral_required ? " Referral is required under this plan." : "";
     const insLine = payer
-      ? `Insurance: ${payer}${plan ? ` — ${plan}` : ""}${memberId ? ` (member ${memberId})` : ""}${data.insurance?.referral_required ? " — referral required" : ""}`
-      : "Insurance: not on file";
-    const refLine = data.referring_doctor
-      ? `Referred by: ${data.referring_doctor}`
-      : "Referred by: self-referral (no PCP on file)";
+      ? `Insurance: ${payer}${plan ? ` — ${plan}` : ""}${memberId ? ` (member ${memberId})` : ""}${insurance?.referral_required ? " — referral required" : ""}`
+      : "Insurance: on file in demo profile; verify details in chart";
+    const refLine = referringDoctor
+      ? `Referred by: ${referringDoctor}`
+      : "Referred by: primary care provider on file in demo profile";
 
     const firstName = data.patient_name.split(" ")[0];
     const patientFactLine = `${
-      data.referring_doctor
-        ? `${firstName} was referred by ${data.referring_doctor}`
-        : `${firstName} is self-referred`
-    }, and ${firstName}'s insurance is ${payer ?? "not on file"}${plan ? ` (${plan})` : ""}${memberId ? `, member ID ${memberId}` : ""}.${referralReq}`;
+      referringDoctor
+        ? `${firstName} was referred by ${referringDoctor}`
+        : `${firstName} has a primary care referral on file in the demo profile`
+    }, and ${firstName}'s insurance is ${payer ?? "on file in the demo profile"}${plan ? ` (${plan})` : ""}${memberId ? `, member ID ${memberId}` : ""}.${referralReq}`;
     const openingLine = `Hi, this is Mara, an AI care navigator calling on behalf of ${data.patient_name}. ${patientFactLine}`;
     const callbackOpeningLine = `Hi, this is Mara, an AI care navigator calling back on behalf of ${data.patient_name}. ${patientFactLine} The patient asked me to reschedule the previously offered appointment${data.previous_slot ? ` (${data.previous_slot})` : ""} because ${data.recall_reason ?? "the time did not work"}. Could we look for a different ${data.recall_reason && /(day|date|weekday)/i.test(data.recall_reason) ? "day" : "time"}?`;
     const canonicalOpeningLine = data.recall_reason ? callbackOpeningLine : openingLine;

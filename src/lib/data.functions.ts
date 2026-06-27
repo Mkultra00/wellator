@@ -50,6 +50,40 @@ export const listPatients = createServerFn({ method: "GET" }).handler(async () =
   }));
 });
 
+export const getPatientVoiceContext = createServerFn({ method: "GET" })
+  .inputValidator((d) => z.object({ patient_id: z.string().min(1) }).parse(d))
+  .handler(async ({ data }) => {
+    const db = await admin();
+    const { data: p, error } = await db
+      .from("patients")
+      .select(
+        "id,full_name,preferred_language,accessibility_notes,primary_provider:providers!patients_primary_provider_id_fkey(name,specialty,clinic_address),insurance_profiles(payer,plan,member_id,group_id,referral_required)",
+      )
+      .eq("id", data.patient_id)
+      .maybeSingle();
+    if (error) throw new Error(error.message);
+    if (!p) throw new Error("Patient not found");
+    const insurance = Array.isArray((p as any).insurance_profiles)
+      ? (p as any).insurance_profiles[0] ?? null
+      : (p as any).insurance_profiles ?? null;
+    const primary = (p as any).primary_provider ?? null;
+    const primary_provider_summary = primary
+      ? `${primary.name} (${primary.specialty})`
+      : "primary care provider on file in demo profile";
+    const insurance_summary = insurance?.payer
+      ? `${insurance.payer}${insurance.plan ? ` — ${insurance.plan}` : ""}${insurance.member_id ? `, member ID ${insurance.member_id}` : ""}${insurance.referral_required ? ", referral required" : ""}`
+      : "insurance on file in demo profile";
+    return {
+      patient_name: (p as any).full_name,
+      preferred_language: (p as any).preferred_language,
+      accessibility_notes: (p as any).accessibility_notes ?? "",
+      primary_provider: primary,
+      insurance,
+      primary_provider_summary,
+      insurance_summary,
+    };
+  });
+
 
 export const listReferralNetwork = createServerFn({ method: "GET" })
   .inputValidator((d) => z.object({ patient_id: z.string().min(1) }).parse(d))

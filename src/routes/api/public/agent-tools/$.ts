@@ -14,6 +14,8 @@ const ALLOWED: ToolName[] = [
   "find_providers",
   "check_availability",
   "book_appointment",
+  "get_patient_profile",
+  "get_appointments",
   "get_insurance_summary",
   "get_billing_summary",
   "request_human_transfer",
