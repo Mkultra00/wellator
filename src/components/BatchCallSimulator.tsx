@@ -819,7 +819,7 @@ function CallRow({
     >
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <StatusIcon status={status} outcome={outcome} isActive={isActive} />
             <div className="font-medium">{provider.name}</div>
             <Badge variant="secondary" className="text-xs">
@@ -828,9 +828,20 @@ function CallRow({
             {provider.distance_miles != null && (
               <span className="text-xs text-muted-foreground">· {provider.distance_miles} mi</span>
             )}
+            {call.origin === "callback" && (
+              <Badge variant="outline" className="border-amber-500 text-xs text-amber-700">
+                Callback{call.recall_reason ? `: ${call.recall_reason}` : ""}
+              </Badge>
+            )}
+            {call.origin === "alternative" && (
+              <Badge variant="outline" className="border-primary text-xs text-primary">
+                Alternative
+              </Badge>
+            )}
           </div>
           <div className="mt-0.5 text-xs text-muted-foreground">{provider.location}</div>
         </div>
+
         <div className="flex items-center gap-2">
           <OutcomeBadge status={status} outcome={outcome} isActive={isActive} />
           {canConfirm && (
