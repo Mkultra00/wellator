@@ -105,11 +105,15 @@ function callerLabel(log: CallLog, outcome: OutcomeInfo): string {
   if (log.scenario === "patient_confirmation") {
     return `Mara → ${patient}`;
   }
+  if (log.scenario === "human_escalation") {
+    return `Human coordinator → ${patient}`;
+  }
   if (outcome.provider_name) {
     return `Mara → ${outcome.provider_name}'s office (for ${patient})`;
   }
   return `Mara (for ${patient})`;
 }
+
 
 function InboxPage() {
   const fetchLogs = useServerFn(listCallLogs);
