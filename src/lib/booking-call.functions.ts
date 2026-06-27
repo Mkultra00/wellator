@@ -42,7 +42,7 @@ async function callLLM(lovableKey: string, system: string, user: string): Promis
         Authorization: `Bearer ${basetenKey}`,
       },
       body: JSON.stringify({
-        model: "deepseek-ai/DeepSeek-V4-Pro",
+        model: "openai/gpt-oss-120b",
         messages: [
           { role: "system", content: system },
           { role: "user", content: user },
