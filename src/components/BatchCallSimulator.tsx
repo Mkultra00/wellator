@@ -703,6 +703,12 @@ export function BatchCallSimulator({ patient, providers, preferences, onReset, o
     toast(`Cancelled ${calls[i].provider.name}. Pick another doctor from the list.`);
   }
 
+  function stopAnd(next: () => void) {
+    cancelRef.current = true;
+    audioRef.current?.pause();
+    next();
+  }
+
 
   return (
     <Card className="overflow-hidden border-2">
@@ -721,10 +727,10 @@ export function BatchCallSimulator({ patient, providers, preferences, onReset, o
           </div>
         </div>
         <div className="flex gap-2">
-          <Button variant="ghost" size="sm" onClick={onReset} className="gap-1">
+          <Button variant="ghost" size="sm" onClick={() => stopAnd(onReset)} className="gap-1">
             <ArrowLeft className="h-4 w-4" /> New batch
           </Button>
-          <Button variant="outline" size="sm" onClick={onClose}>
+          <Button variant="outline" size="sm" onClick={() => stopAnd(onClose)}>
             Close
           </Button>
         </div>
@@ -765,7 +771,7 @@ export function BatchCallSimulator({ patient, providers, preferences, onReset, o
           onAccept={confirmBooking}
           onRecall={recallOne}
           onCancel={cancelOne}
-          onPickMore={onReset}
+          onPickMore={() => stopAnd(onReset)}
         />
       )}
 
