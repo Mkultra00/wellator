@@ -70,9 +70,17 @@ export function BatchCallSimulator({ patient, providers, preferences, onReset, o
   const [confirmedIdx, setConfirmedIdx] = useState<number | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const cancelRef = useRef(false);
+  const [ctx, setCtx] = useState<{ referring_doctor: string | null; insurance: any } | null>(null);
 
   const genDialog = useServerFn(generateBookingDialog);
   const tts = useServerFn(synthesizeVoice);
+  const fetchCtx = useServerFn(getBookingContext);
+
+  useEffect(() => {
+    fetchCtx({ data: { patient_id: patient.id } })
+      .then((r) => setCtx(r))
+      .catch(() => setCtx({ referring_doctor: null, insurance: null }));
+  }, [patient.id, fetchCtx]);
 
   const allDone = phase === "finished";
 
