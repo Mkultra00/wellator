@@ -29,8 +29,8 @@ export function pickOfficeVoice(seed: string) {
 export const MARA_VOICE_ID = MARA_VOICE;
 
 /**
- * LLM call — prefers Baseten (DeepSeek V4 Pro) when BASETEN_API_KEY is set,
- * falls back to Lovable AI Gateway (gemini-3.5-flash).
+ * LLM call — prefers Baseten (DeepSeek) when BASETEN_API_KEY is set,
+ * falls back to Lovable AI Gateway (gemini-2.5-flash).
  */
 async function callLLM(lovableKey: string, system: string, user: string): Promise<Response> {
   const basetenKey = process.env.BASETEN_API_KEY;
@@ -42,7 +42,7 @@ async function callLLM(lovableKey: string, system: string, user: string): Promis
         Authorization: `Bearer ${basetenKey}`,
       },
       body: JSON.stringify({
-        model: "openai/gpt-oss-120b",
+        model: "deepseek-ai/DeepSeek-V3-0324",
         messages: [
           { role: "system", content: system },
           { role: "user", content: user },
