@@ -31,7 +31,7 @@ import {
   type DialogTurn,
   type DialogOutcome,
 } from "@/lib/booking-call.functions";
-import { getBookingContext, saveBookingCall } from "@/lib/data.functions";
+import { getBookingContext, saveBookingCall, listReferralNetwork } from "@/lib/data.functions";
 import type { PickedProvider } from "./ProviderPicker";
 import type { BookingPrefs } from "./BookingPreferences";
 import type { Patient } from "@/lib/patient-context";
@@ -45,7 +45,11 @@ type CallState = {
   revealed: number; // how many turns shown so far
   outcome?: DialogOutcome;
   decision?: "accepted" | "rejected" | "cancelled";
+  recall_reason?: string;
+  origin?: "initial" | "alternative" | "callback";
+  replaces_provider_id?: string;
 };
+
 
 function scoreOutcome(o: DialogOutcome | undefined, prefs: BookingPrefs, provider: PickedProvider) {
   if (!o || o.kind !== "offered") return -1;
@@ -90,9 +94,11 @@ export function BatchCallSimulator({ patient, providers, preferences, onReset, o
   const genConfirm = useServerFn(generatePatientConfirmDialog);
   const tts = useServerFn(synthesizeVoice);
   const fetchCtx = useServerFn(getBookingContext);
+  const fetchNetwork = useServerFn(listReferralNetwork);
   const persistCall = useServerFn(saveBookingCall);
 
-
+  const [network, setNetwork] = useState<{ specialists: PickedProvider[] } | null>(null);
+  const patientConfirmedRef = useRef(false);
 
   const startedRef = useRef(false);
 
@@ -100,7 +106,11 @@ export function BatchCallSimulator({ patient, providers, preferences, onReset, o
     fetchCtx({ data: { patient_id: patient.id } })
       .then((r) => setCtx(r))
       .catch(() => setCtx({ referring_doctor: null, insurance: null }));
-  }, [patient.id, fetchCtx]);
+    fetchNetwork({ data: { patient_id: patient.id } })
+      .then((r: any) => setNetwork({ specialists: r.specialists ?? [] }))
+      .catch(() => setNetwork({ specialists: [] }));
+  }, [patient.id, fetchCtx, fetchNetwork]);
+
 
   const allDone = phase === "finished" || phase === "confirming" || phase === "confirmed";
 
@@ -136,11 +146,18 @@ export function BatchCallSimulator({ patient, providers, preferences, onReset, o
     });
   }
 
-  async function runOne(idx: number) {
-    const provider = providers[idx];
+  async function runOne(
+    idx: number,
+    provider: PickedProvider,
+    opts?: { recall_reason?: string; previous_slot?: string | null },
+  ) {
     setCalls((prev) =>
       prev.map((c, i) => (i === idx ? { ...c, status: "live", turns: [], revealed: 0 } : c)),
     );
+    const recallNote = opts?.recall_reason
+      ? `Patient asked to reschedule — ${opts.recall_reason}`
+      : null;
+    const mergedNotes = [preferences.notes, recallNote].filter(Boolean).join(". ");
     let dialog;
     try {
       dialog = await genDialog({
@@ -156,8 +173,10 @@ export function BatchCallSimulator({ patient, providers, preferences, onReset, o
             days: preferences.days,
             time_of_day: preferences.time_of_day,
             max_distance_miles: preferences.max_distance_miles,
-            notes: preferences.notes,
+            notes: mergedNotes || preferences.notes,
           },
+          recall_reason: opts?.recall_reason ?? null,
+          previous_slot: opts?.previous_slot ?? null,
         },
       });
     } catch (e) {
@@ -192,7 +211,6 @@ export function BatchCallSimulator({ patient, providers, preferences, onReset, o
       prev.map((c, i) => (i === idx ? { ...c, status: "done", outcome: dialog.outcome } : c)),
     );
 
-    // Persist to call_logs so the inbox can show transcripts + status.
     persistCall({
       data: {
         patient_id: patient.id,
@@ -209,6 +227,7 @@ export function BatchCallSimulator({ patient, providers, preferences, onReset, o
           provider_name: provider.name,
           provider_specialty: provider.specialty,
           provider_location: provider.location,
+          recall_reason: opts?.recall_reason ?? null,
           status:
             dialog.outcome.kind === "offered"
               ? "booked"
@@ -227,7 +246,8 @@ export function BatchCallSimulator({ patient, providers, preferences, onReset, o
     for (let i = 0; i < providers.length; i++) {
       if (cancelRef.current) return;
       setActiveIdx(i);
-      await runOne(i);
+      await runOne(i, providers[i]);
+
     }
     setPhase("finished");
   }, [providers.length]);
@@ -243,9 +263,9 @@ export function BatchCallSimulator({ patient, providers, preferences, onReset, o
   // After all office calls finish, if Mara secured any offers, call the patient
   // to read them out and confirm, then "email" the confirmation.
   useEffect(() => {
-    if (phase !== "finished") return;
+    if (phase !== "finished" || patientConfirmedRef.current) return;
     const offers = calls
-      .filter((c) => c.outcome?.kind === "offered")
+      .filter((c) => c.outcome?.kind === "offered" && c.decision !== "cancelled")
       .map((c) => ({
         provider_id: c.provider.id,
         provider_name: c.provider.name,
@@ -286,21 +306,30 @@ export function BatchCallSimulator({ patient, providers, preferences, onReset, o
         else await new Promise((r) => setTimeout(r, 600));
       }
       if (cancelled) return;
+      patientConfirmedRef.current = true;
       const accepted = new Set(confirm.outcome.accepted_provider_ids ?? []);
+      const declined = new Set(confirm.outcome.declined_provider_ids ?? []);
+      const callbacks = confirm.outcome.callback_requests ?? [];
+
       setCalls((prev) =>
-        prev.map((c) =>
-          accepted.has(c.provider.id) ? { ...c, decision: "accepted" } : c,
-        ),
+        prev.map((c) => {
+          if (accepted.has(c.provider.id)) return { ...c, decision: "accepted" };
+          if (declined.has(c.provider.id)) return { ...c, decision: "rejected" };
+          return c;
+        }),
       );
+
       const acceptedOffers = offers.filter((o) => accepted.has(o.provider_id));
-      const finalOffers = acceptedOffers.length > 0 ? acceptedOffers : offers;
-      const subject = `Your appointment ${finalOffers.length === 1 ? "is" : "s are"} ready to confirm`;
-      const lines = finalOffers
-        .map(
-          (o) => `• ${o.provider_name} (${o.specialty}) — ${o.slot}\n  ${o.location}`,
-        )
+      const subject = `Your appointment ${acceptedOffers.length === 1 ? "is" : "s are"} ready to confirm`;
+      const lines = (acceptedOffers.length > 0 ? acceptedOffers : offers)
+        .map((o) => `• ${o.provider_name} (${o.specialty}) — ${o.slot}\n  ${o.location}`)
         .join("\n");
-      const body = `Hi ${patient.full_name.split(" ")[0]},\n\nThis is Mara following up on our call. Please confirm the following appointment${finalOffers.length === 1 ? "" : "s"}:\n\n${lines}\n\nReply YES to confirm, or call us back and we'll find another time.\n\n— Mara, your care navigator`;
+      const followups: string[] = [];
+      if (callbacks.length > 0)
+        followups.push(`I'll call ${callbacks.length} office${callbacks.length === 1 ? "" : "s"} back to reschedule.`);
+      if (declined.size > 0)
+        followups.push(`I'll find ${declined.size === 1 ? "an alternative doctor" : `${declined.size} alternative doctors`} from your referral list.`);
+      const body = `Hi ${patient.full_name.split(" ")[0]},\n\nThis is Mara following up on our call. Confirmed appointment${acceptedOffers.length === 1 ? "" : "s"}:\n\n${lines || "(none yet — see below)"}\n\n${followups.join(" ")}\n\nReply YES to confirm, or call us back any time.\n\n— Mara, your care navigator`;
       setEmailSent({
         to: `${patient.full_name.toLowerCase().replace(/\s+/g, ".")}@example.com`,
         subject,
@@ -309,7 +338,6 @@ export function BatchCallSimulator({ patient, providers, preferences, onReset, o
       setPhase("confirmed");
       toast.success("Confirmation email sent to patient");
 
-      // Persist the patient confirmation call to call_logs.
       persistCall({
         data: {
           patient_id: patient.id,
@@ -322,19 +350,105 @@ export function BatchCallSimulator({ patient, providers, preferences, onReset, o
           outcome: JSON.stringify({
             kind: "patient_confirmed",
             status: "confirmed",
-            accepted_provider_ids: confirm.outcome.accepted_provider_ids ?? [],
-            declined_provider_ids: confirm.outcome.declined_provider_ids ?? [],
-            offers: finalOffers,
+            accepted_provider_ids: [...accepted],
+            declined_provider_ids: [...declined],
+            callback_requests: callbacks,
+            offers: acceptedOffers,
             email: { to: `${patient.full_name.toLowerCase().replace(/\s+/g, ".")}@example.com`, subject, body },
           }),
         },
       }).catch(() => {});
+
+      // ---- Follow-ups: recall offices the patient asked to reschedule, and
+      // find alternative doctors from the referral network for declined ones.
+      const followupTasks: Array<() => Promise<void>> = [];
+
+      for (const cb of callbacks) {
+        if (declined.has(cb.provider_id)) continue;
+        const existingIdx = calls.findIndex((c) => c.provider.id === cb.provider_id);
+        if (existingIdx < 0) continue;
+        const prevSlot =
+          calls[existingIdx].outcome?.kind === "offered"
+            ? (calls[existingIdx].outcome as { slot: string }).slot
+            : null;
+        const targetProvider = calls[existingIdx].provider;
+        followupTasks.push(async () => {
+          setCalls((prev) =>
+            prev.map((c, i) =>
+              i === existingIdx
+                ? {
+                    ...c,
+                    status: "queued",
+                    outcome: undefined,
+                    turns: [],
+                    revealed: 0,
+                    decision: undefined,
+                    recall_reason: cb.reason,
+                    origin: "callback",
+                  }
+                : c,
+            ),
+          );
+          setActiveIdx(existingIdx);
+          await runOne(existingIdx, targetProvider, {
+            recall_reason: cb.reason,
+            previous_slot: prevSlot,
+          });
+        });
+      }
+
+      const usedIds = new Set(calls.map((c) => c.provider.id));
+      for (const declinedId of declined) {
+        const declinedCall = calls.find((c) => c.provider.id === declinedId);
+        if (!declinedCall) continue;
+        const alt = (network?.specialists ?? [])
+          .filter(
+            (s) =>
+              s.specialty === declinedCall.provider.specialty && !usedIds.has(s.id),
+          )
+          .sort((a, b) => (a.distance_miles ?? 9999) - (b.distance_miles ?? 9999))[0];
+        if (!alt) {
+          toast(`No alternative ${declinedCall.provider.specialty} available in network.`);
+          continue;
+        }
+        usedIds.add(alt.id);
+        followupTasks.push(async () => {
+          let newIdx = -1;
+          setCalls((prev) => {
+            newIdx = prev.length;
+            return [
+              ...prev,
+              {
+                provider: alt,
+                status: "queued",
+                turns: [],
+                revealed: 0,
+                origin: "alternative",
+                replaces_provider_id: declinedId,
+              },
+            ];
+          });
+          await new Promise((r) => setTimeout(r, 50));
+          if (newIdx < 0) return;
+          setActiveIdx(newIdx);
+          await runOne(newIdx, alt);
+        });
+      }
+
+      if (followupTasks.length === 0) return;
+      setPhase("running");
+      toast(`Mara is following up on ${followupTasks.length} item${followupTasks.length === 1 ? "" : "s"}…`);
+      for (const task of followupTasks) {
+        if (cancelRef.current || cancelled) return;
+        await task();
+      }
+      setPhase("finished");
     })();
 
     return () => {
       cancelled = true;
     };
-  }, [phase, calls, genConfirm, tts, patient.full_name]);
+  }, [phase, calls, genConfirm, tts, patient.full_name, network]);
 
 
 
@@ -345,17 +459,37 @@ export function BatchCallSimulator({ patient, providers, preferences, onReset, o
   }
 
   async function recallOne(i: number) {
+    const target = calls[i];
+    const prevSlot =
+      target.outcome?.kind === "offered" ? (target.outcome as { slot: string }).slot : null;
+    const reason = window.prompt(
+      `Why does ${target.provider.name} need to call back? (e.g. "patient prefers mornings" or "Tuesday doesn't work — try Thursday")`,
+      target.recall_reason ?? "",
+    );
+    if (reason === null) return;
     setCalls((prev) =>
       prev.map((c, idx) =>
         idx === i
-          ? { ...c, status: "queued", outcome: undefined, turns: [], revealed: 0, decision: undefined }
+          ? {
+              ...c,
+              status: "queued",
+              outcome: undefined,
+              turns: [],
+              revealed: 0,
+              decision: undefined,
+              recall_reason: reason || undefined,
+              origin: "callback",
+            }
           : c,
       ),
     );
     if (confirmedIdx === i) setConfirmedIdx(null);
     setActiveIdx(i);
     setPhase("running");
-    await runOne(i);
+    await runOne(i, target.provider, {
+      recall_reason: reason || undefined,
+      previous_slot: prevSlot,
+    });
     setPhase("finished");
   }
 
@@ -364,6 +498,7 @@ export function BatchCallSimulator({ patient, providers, preferences, onReset, o
     if (confirmedIdx === i) setConfirmedIdx(null);
     toast(`Cancelled ${calls[i].provider.name}. Pick another doctor from the list.`);
   }
+
 
   return (
     <Card className="overflow-hidden border-2">
@@ -584,12 +719,18 @@ function FinalReport({
                     ? `✅ Booked — ${slot}`
                     : c.decision === "cancelled"
                       ? "❌ Cancelled by patient"
-                      : isOffered
-                        ? `Offered ${slot}`
-                        : c.outcome?.kind === "voicemail"
-                          ? "Left voicemail — no live response"
-                          : "No availability"}
+                      : c.decision === "rejected"
+                        ? "🚫 Patient declined this doctor — finding alternative"
+                        : isOffered
+                          ? `Offered ${slot}`
+                          : c.outcome?.kind === "voicemail"
+                            ? "Left voicemail — no live response"
+                            : "No availability"}
+                  {c.recall_reason && c.decision !== "rejected" && (
+                    <span className="ml-1 italic">· recalled: {c.recall_reason}</span>
+                  )}
                 </div>
+
               </div>
 
               <div className="flex flex-wrap gap-2">
@@ -684,7 +825,7 @@ function CallRow({
     >
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <StatusIcon status={status} outcome={outcome} isActive={isActive} />
             <div className="font-medium">{provider.name}</div>
             <Badge variant="secondary" className="text-xs">
@@ -693,9 +834,20 @@ function CallRow({
             {provider.distance_miles != null && (
               <span className="text-xs text-muted-foreground">· {provider.distance_miles} mi</span>
             )}
+            {call.origin === "callback" && (
+              <Badge variant="outline" className="border-amber-500 text-xs text-amber-700">
+                Callback{call.recall_reason ? `: ${call.recall_reason}` : ""}
+              </Badge>
+            )}
+            {call.origin === "alternative" && (
+              <Badge variant="outline" className="border-primary text-xs text-primary">
+                Alternative
+              </Badge>
+            )}
           </div>
           <div className="mt-0.5 text-xs text-muted-foreground">{provider.location}</div>
         </div>
+
         <div className="flex items-center gap-2">
           <OutcomeBadge status={status} outcome={outcome} isActive={isActive} />
           {canConfirm && (

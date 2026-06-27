@@ -51,7 +51,10 @@ const DialogInput = z.object({
     max_distance_miles: z.number().optional().nullable(),
     notes: z.string().optional().nullable(),
   }),
+  recall_reason: z.string().optional().nullable(),
+  previous_slot: z.string().optional().nullable(),
 });
+
 
 export type DialogTurn = { speaker: "mara" | "office"; text: string };
 export type DialogOutcome =
@@ -72,7 +75,7 @@ export const generateBookingDialog = createServerFn({ method: "POST" })
       prefs.preferred_locations ? ` near ${prefs.preferred_locations}` : ""
     }${prefs.notes ? `. Notes: ${prefs.notes}` : ""}`;
 
-    const system = `You generate realistic short phone-call transcripts between Mara (an AI care navigator calling on behalf of a patient) and a receptionist at a doctor's office. Output ONLY valid JSON matching: {"turns":[{"speaker":"mara"|"office","text":"..."}], "outcome": {"kind":"offered","slot":"..."} | {"kind":"voicemail"} | {"kind":"no_availability"}}. 6-10 turns. Natural, concise spoken lines (1-2 sentences each). In her OPENING turn Mara must: identify herself as an AI care navigator, name the patient, name the referring primary care doctor (if provided), and state the patient's insurance payer + plan (if provided). Then request an appointment matching preferences. Receptionist either offers a specific slot (day + time), says no availability for ~2 weeks, or it's a voicemail (then only 1-2 turns, Mara leaves a message including referring doctor and insurance). Vary outcomes naturally — ~65% offered, ~20% no_availability, ~15% voicemail.`;
+    const system = `You generate realistic short phone-call transcripts between Mara (an AI care navigator calling on behalf of a patient) and a receptionist at a doctor's office. Output ONLY valid JSON matching: {"turns":[{"speaker":"mara"|"office","text":"..."}], "outcome": {"kind":"offered","slot":"..."} | {"kind":"voicemail"} | {"kind":"no_availability"}}. 6-10 turns. Natural, concise spoken lines (1-2 sentences each). In her OPENING turn Mara must: identify herself as an AI care navigator, name the patient, name the referring primary care doctor (if provided), and state the patient's insurance payer + plan (if provided). Then request an appointment matching preferences. If this is a CALLBACK (the user prompt will say so), Mara opens by saying she's calling back about the previously offered slot, explains the patient asked to reschedule and gives the reason (day vs time), and asks for an alternative that fits. Receptionist either offers a specific slot (day + time), says no availability for ~2 weeks, or it's a voicemail (then only 1-2 turns, Mara leaves a message). Vary outcomes naturally — ~65% offered, ~20% no_availability, ~15% voicemail.`;
 
     const insLine = data.insurance
       ? `Insurance: ${data.insurance.payer ?? "Unknown payer"}${data.insurance.plan ? ` — ${data.insurance.plan}` : ""}${data.insurance.member_id ? ` (member ${data.insurance.member_id})` : ""}${data.insurance.referral_required ? " — referral required" : ""}`
@@ -81,11 +84,16 @@ export const generateBookingDialog = createServerFn({ method: "POST" })
       ? `Referred by: ${data.referring_doctor}`
       : "Referred by: self-referral (no PCP on file)";
 
+    const recallLine = data.recall_reason
+      ? `\n*** CALLBACK *** Previously offered: ${data.previous_slot ?? "an earlier slot"}. Patient asked to reschedule. Reason: ${data.recall_reason}. Mara must reference this and request a different ${/(day|date|weekday)/i.test(data.recall_reason) ? "day" : "time"} that still fits preferences.`
+      : "";
+
     const user = `Patient: ${data.patient_name}
 ${refLine}
 ${insLine}
 Calling: ${data.provider_name}, ${data.provider_specialty} — ${data.provider_location}
-${prefLine}`;
+${prefLine}${recallLine}`;
+
 
     const res = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
@@ -179,9 +187,15 @@ const ConfirmInput = z.object({
 });
 
 export type ConfirmTurn = { speaker: "mara" | "patient"; text: string };
+export type CallbackRequest = {
+  provider_id: string;
+  reason: string;
+  change: "day" | "time" | "other";
+};
 export type ConfirmOutcome = {
   accepted_provider_ids: string[];
   declined_provider_ids: string[];
+  callback_requests?: CallbackRequest[];
   notes?: string;
 };
 
@@ -191,7 +205,8 @@ export const generatePatientConfirmDialog = createServerFn({ method: "POST" })
     const apiKey = process.env.LOVABLE_API_KEY;
     if (!apiKey) throw new Error("LOVABLE_API_KEY not configured");
 
-    const system = `You generate a short realistic phone-call transcript where Mara (AI care navigator) calls the elderly patient to review the appointment slots she just secured and asks the patient to confirm. Output ONLY JSON: {"turns":[{"speaker":"mara"|"patient","text":"..."}], "outcome":{"accepted_provider_ids":["..."],"declined_provider_ids":["..."],"notes":"..."}}. 6-10 turns. Warm, slow, clear language for an older adult. Mara opens by greeting the patient by first name, says she called the offices, then lists each offer (provider, specialty, day/time). She asks the patient if the times work. Patient responds naturally — usually accepts most/all, sometimes asks to skip one. End with Mara confirming next steps and that a confirmation email is on the way.`;
+    const system = `You generate a short realistic phone-call transcript where Mara (AI care navigator) calls the elderly patient to review the appointment slots she just secured and asks the patient to confirm. Output ONLY JSON: {"turns":[{"speaker":"mara"|"patient","text":"..."}], "outcome":{"accepted_provider_ids":["..."],"declined_provider_ids":["..."],"callback_requests":[{"provider_id":"...","reason":"...","change":"day"|"time"|"other"}],"notes":"..."}}. 8-14 turns. Warm, slow, clear language for an older adult. Mara opens by greeting the patient by first name, says she called the offices, then lists each offer (provider, specialty, day/time). She asks the patient if each time works. For EACH offer the patient does one of three things: (a) accept it, (b) reject the doctor outright ("I'd rather see someone else") — goes into declined_provider_ids, or (c) ask Mara to call back to reschedule. When the patient asks for a callback, Mara MUST ask a follow-up: "Is it the day or the time that doesn't work?" The patient answers (e.g. "the time — mornings are better" or "not Tuesday, try later in the week"). Encode that as a callback_request with change="day" or "time" and a short reason. Aim to include at least one callback_request when there are 2+ offers so the flow is realistic. End with Mara confirming next steps, that she'll call back the offices that need rescheduling, find alternatives for any declined doctors, and that a confirmation email is on the way.`;
+
 
     const offerLines = data.offers
       .map(
