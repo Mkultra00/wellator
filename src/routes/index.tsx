@@ -4,6 +4,7 @@ import { AppShell } from "@/components/AppShell";
 import { VoicePanel, type Scenario } from "@/components/VoicePanel";
 import { ProviderPicker, type PickedProvider } from "@/components/ProviderPicker";
 import { BookingPreferences, type BookingPrefs } from "@/components/BookingPreferences";
+import { BatchCallSimulator } from "@/components/BatchCallSimulator";
 import { usePatient } from "@/lib/patient-context";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -201,17 +202,28 @@ function Index() {
             })}
           </section>
 
-          {(bookingReady || otherReady) && (
+          {bookingReady && (
+            <section className="space-y-3">
+              <BatchCallSimulator
+                key={`${patient.id}-${providers.map((p) => p.id).join(",")}`}
+                patient={patient}
+                providers={providers}
+                preferences={prefs!}
+                onReset={resetBooking}
+                onClose={() => {
+                  setActive(null);
+                  resetBooking();
+                }}
+              />
+            </section>
+          )}
+
+          {otherReady && (
             <section className="space-y-3">
               <VoicePanel
-                key={`${patient.id}-${active}-${providers.map((p) => p.id).join(",") || "none"}`}
+                key={`${patient.id}-${active}`}
                 patient={patient}
                 scenario={active!}
-                context={
-                  bookingReady
-                    ? { providers, preferences: prefs }
-                    : undefined
-                }
                 onClose={() => {
                   setActive(null);
                   resetBooking();
