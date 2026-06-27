@@ -219,21 +219,34 @@ export const synthesizeVoice = createServerFn({ method: "POST" })
   .handler(async ({ data }) => {
     const apiKey = process.env.ELEVENLABS_API_KEY;
     if (!apiKey) throw new Error("ELEVENLABS_API_KEY not configured");
-    const res = await fetch(
-      `https://api.elevenlabs.io/v1/text-to-speech/${data.voice_id}?output_format=mp3_44100_128`,
-      {
-        method: "POST",
-        headers: { "xi-api-key": apiKey, "Content-Type": "application/json" },
-        body: JSON.stringify({
-          text: data.text,
-          model_id: "eleven_turbo_v2_5",
-          voice_settings: { stability: 0.5, similarity_boost: 0.75, speed: 1.0 },
-        }),
-      },
-    );
+    // Hard 8s upstream timeout so a stuck TTS call cannot stall the batch.
+    const ac = new AbortController();
+    const timer = setTimeout(() => ac.abort(), 8000);
+    let res: Response;
+    try {
+      res = await fetch(
+        `https://api.elevenlabs.io/v1/text-to-speech/${data.voice_id}?output_format=mp3_44100_128`,
+        {
+          method: "POST",
+          headers: { "xi-api-key": apiKey, "Content-Type": "application/json" },
+          body: JSON.stringify({
+            text: data.text,
+            model_id: "eleven_turbo_v2_5",
+            voice_settings: { stability: 0.5, similarity_boost: 0.75, speed: 1.0 },
+          }),
+          signal: ac.signal,
+        },
+      );
+    } catch (e) {
+      clearTimeout(timer);
+      const msg = e instanceof Error ? e.message : String(e);
+      throw new Error(ac.signal.aborted ? "TTS upstream timeout (8s)" : `TTS fetch failed: ${msg}`);
+    }
+    clearTimeout(timer);
     if (!res.ok) {
       const t = await res.text().catch(() => "");
-      throw new Error(`TTS ${res.status}: ${t}`);
+      console.error(`[synthesizeVoice] ElevenLabs ${res.status}: ${t.slice(0, 300)}`);
+      throw new Error(`TTS ${res.status}: ${t.slice(0, 200)}`);
     }
     const buf = await res.arrayBuffer();
     const { Buffer } = await import("node:buffer");

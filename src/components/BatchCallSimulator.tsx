@@ -88,6 +88,7 @@ export function BatchCallSimulator({ patient, providers, preferences, onReset, o
   }>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const cancelRef = useRef(false);
+  const ttsFailedOnceRef = useRef(false);
   const [escalations, setEscalations] = useState<
     Array<{
       specialty: string;
@@ -157,21 +158,36 @@ export function BatchCallSimulator({ patient, providers, preferences, onReset, o
     });
   }
 
-  async function runOne(
-    idx: number,
+  // Client-side TTS with hard 10s timeout. Surfaces failures (once) so the
+  // user knows audio is muted instead of silently waiting.
+  async function ttsWithTimeout(text: string, voiceId: string): Promise<{ audio_base64: string } | null> {
+    try {
+      const result = await Promise.race([
+        tts({ data: { text, voice_id: voiceId } }),
+        new Promise<never>((_, rej) => setTimeout(() => rej(new Error("TTS client timeout (10s)")), 10000)),
+      ]);
+      return result as { audio_base64: string };
+    } catch (e) {
+      if (!ttsFailedOnceRef.current) {
+        ttsFailedOnceRef.current = true;
+        toast.warning("Voice playback unavailable — showing transcripts only", {
+          description: e instanceof Error ? e.message : "TTS failed",
+        });
+      }
+      return null;
+    }
+  }
+
+  type PreparedDialog = Awaited<ReturnType<typeof genDialog>>;
+
+  async function prepareDialog(
     provider: PickedProvider,
     opts?: { recall_reason?: string; previous_slot?: string | null },
-  ) {
-    setCalls((prev) =>
-      prev.map((c, i) => (i === idx ? { ...c, status: "live", turns: [], revealed: 0 } : c)),
-    );
-    const recallNote = opts?.recall_reason
-      ? `Patient asked to reschedule — ${opts.recall_reason}`
-      : null;
+  ): Promise<PreparedDialog | null> {
+    const recallNote = opts?.recall_reason ? `Patient asked to reschedule — ${opts.recall_reason}` : null;
     const mergedNotes = [preferences.notes, recallNote].filter(Boolean).join(". ");
-    let dialog;
     try {
-      dialog = await genDialog({
+      return await genDialog({
         data: {
           patient_name: patient.full_name,
           patient_id: patient.id,
@@ -195,34 +211,28 @@ export function BatchCallSimulator({ patient, providers, preferences, onReset, o
       toast.error(`Call to ${provider.name} failed`, {
         description: e instanceof Error ? e.message : "Dialog generation failed",
       });
-      setCalls((prev) =>
-        prev.map((c, i) =>
-          i === idx ? { ...c, status: "done", outcome: { kind: "no_availability" } } : c,
-        ),
-      );
-      return;
+      return null;
     }
-    setCalls((prev) => prev.map((c, i) => (i === idx ? { ...c, turns: dialog.turns } : c)));
+  }
 
+  async function playDialog(idx: number, provider: PickedProvider, dialog: PreparedDialog) {
+    setCalls((prev) =>
+      prev.map((c, i) =>
+        i === idx ? { ...c, status: "live", turns: dialog.turns, revealed: 0 } : c,
+      ),
+    );
     for (let t = 0; t < dialog.turns.length; t++) {
       if (cancelRef.current) return;
       const turn = dialog.turns[t];
       const voiceId = turn.speaker === "mara" ? dialog.mara_voice_id : dialog.office_voice_id;
-      let audio: { audio_base64: string } | null = null;
-      try {
-        audio = await tts({ data: { text: turn.text, voice_id: voiceId } });
-      } catch {
-        // skip audio, still reveal text
-      }
+      const audio = await ttsWithTimeout(turn.text, voiceId);
       setCalls((prev) => prev.map((c, i) => (i === idx ? { ...c, revealed: t + 1 } : c)));
       if (audio) await playAudio(audio.audio_base64);
-      else await new Promise((r) => setTimeout(r, 600));
+      else await new Promise((r) => setTimeout(r, 500));
     }
-
     setCalls((prev) =>
       prev.map((c, i) => (i === idx ? { ...c, status: "done", outcome: dialog.outcome } : c)),
     );
-
     persistCall({
       data: {
         patient_id: patient.id,
@@ -239,7 +249,6 @@ export function BatchCallSimulator({ patient, providers, preferences, onReset, o
           provider_name: provider.name,
           provider_specialty: provider.specialty,
           provider_location: provider.location,
-          recall_reason: opts?.recall_reason ?? null,
           status:
             dialog.outcome.kind === "offered"
               ? "booked"
@@ -251,15 +260,50 @@ export function BatchCallSimulator({ patient, providers, preferences, onReset, o
     }).catch(() => {});
   }
 
+  // Backwards-compat wrapper used by recallOne / follow-up tasks.
+  async function runOne(
+    idx: number,
+    provider: PickedProvider,
+    opts?: { recall_reason?: string; previous_slot?: string | null },
+  ) {
+    setCalls((prev) =>
+      prev.map((c, i) => (i === idx ? { ...c, status: "live", turns: [], revealed: 0 } : c)),
+    );
+    const dialog = await prepareDialog(provider, opts);
+    if (!dialog) {
+      setCalls((prev) =>
+        prev.map((c, i) =>
+          i === idx ? { ...c, status: "done", outcome: { kind: "no_availability" } } : c,
+        ),
+      );
+      return;
+    }
+    await playDialog(idx, provider, dialog);
+  }
+
 
   async function runAll() {
     setPhase("running");
     cancelRef.current = false;
+    // Fan-out: kick off ALL booking dialogs in parallel so the first playback
+    // starts in ~one round-trip (~8-15s) instead of after N sequential gens.
+    const dialogPromises = providers.map((p, i) => prepareDialog(p).then((d) => ({ i, p, d })));
+    // Sequentially play whichever dialog finishes next, in provider order.
+    // Awaiting each promise in order keeps playback ordered while gen runs in parallel.
     for (let i = 0; i < providers.length; i++) {
       if (cancelRef.current) return;
       setActiveIdx(i);
-      await runOne(i, providers[i]);
-
+      const { d } = await dialogPromises[i];
+      if (cancelRef.current) return;
+      if (!d) {
+        setCalls((prev) =>
+          prev.map((c, idx) =>
+            idx === i ? { ...c, status: "done", outcome: { kind: "no_availability" } } : c,
+          ),
+        );
+        continue;
+      }
+      await playDialog(i, providers[i], d);
     }
     setPhase("finished");
   }
@@ -316,13 +360,10 @@ export function BatchCallSimulator({ patient, providers, preferences, onReset, o
         if (cancelRef.current || cancelled) return;
         const turn = confirm.turns[t];
         const voiceId = turn.speaker === "mara" ? confirm.mara_voice_id : confirm.patient_voice_id;
-        let audio: { audio_base64: string } | null = null;
-        try {
-          audio = await tts({ data: { text: turn.text, voice_id: voiceId } });
-        } catch {}
+        const audio = await ttsWithTimeout(turn.text, voiceId);
         setConfirmRevealed(t + 1);
         if (audio) await playAudio(audio.audio_base64);
-        else await new Promise((r) => setTimeout(r, 600));
+        else await new Promise((r) => setTimeout(r, 500));
       }
       if (cancelled) return;
       patientConfirmedRef.current = true;
