@@ -7,9 +7,10 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Stethoscope, Inbox, LayoutDashboard, Mic } from "lucide-react";
+import { Stethoscope, Inbox, LayoutDashboard } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { ReactNode } from "react";
+import avatarAsset from "@/assets/wellator-avatar.png.asset.json";
 
 function NavLink({
   to,
@@ -18,7 +19,7 @@ function NavLink({
   active,
 }: {
   to: string;
-  icon: typeof Mic;
+  icon: React.ComponentType<{ className?: string }>;
   label: string;
   active: boolean;
 }) {
@@ -47,9 +48,13 @@ export function AppShell({ children }: { children: ReactNode }) {
       <header className="border-b border-border bg-card">
         <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-4 px-4 py-3">
           <Link to="/" className="flex items-center gap-2">
-            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary text-primary-foreground">
-              <Mic className="h-5 w-5" />
-            </div>
+            <img
+              src={avatarAsset.url}
+              alt="Wellator"
+              className="h-9 w-9 rounded-full object-cover ring-2 ring-primary/20"
+              width={36}
+              height={36}
+            />
             <div className="leading-tight">
               <div className="text-base font-semibold text-foreground">Wellator</div>
               <div className="text-xs text-muted-foreground">AI Care Navigator</div>
