@@ -117,10 +117,11 @@ function callerLabel(log: CallLog, outcome: OutcomeInfo): string {
 
 
 function InboxPage() {
+  const { patient, isLoading: patientLoading } = usePatient();
   const fetchLogs = useServerFn(listCallLogs);
   const { data, isLoading } = useQuery({
-    queryKey: ["call_logs"],
-    queryFn: async () => (await fetchLogs()) as CallLog[],
+    queryKey: ["call_logs", patient?.id ?? "none"],
+    queryFn: async () => (await fetchLogs({ data: patient ? { patient_id: patient.id } : {} })) as CallLog[],
   });
   const [open, setOpen] = useState<Record<string, boolean>>({});
 
@@ -130,12 +131,18 @@ function InboxPage() {
         <div>
           <h1 className="text-2xl font-bold">Call inbox</h1>
           <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
-            Every call Mara made — to doctor offices on a patient's behalf, and her follow-up
-            confirmation calls to the patient. Expand a row to read the full transcript.
+            Calls for {patient?.full_name ?? "the current patient"}. Switching patients clears this list and
+            shows the new patient's calls.
           </p>
         </div>
 
-        {isLoading ? (
+        {patientLoading ? (
+          <div className="text-muted-foreground">Loading patient…</div>
+        ) : !patient ? (
+          <Card className="p-8 text-center text-muted-foreground">
+            Select a demo patient to see scheduled calls.
+          </Card>
+        ) : isLoading ? (
           <div className="text-muted-foreground">Loading…</div>
         ) : (data ?? []).length === 0 ? (
           <Card className="p-8 text-center text-muted-foreground">
