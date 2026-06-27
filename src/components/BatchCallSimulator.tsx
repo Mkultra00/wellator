@@ -427,7 +427,7 @@ export function BatchCallSimulator({ patient, providers, preferences, onReset, o
   async function runOne(
     idx: number,
     provider: PickedProvider,
-    opts?: { recall_reason?: string; previous_slot?: string | null },
+    opts?: { recall_reason?: string; previous_slot?: string | null; busy_slots?: string[] },
   ) {
     setCalls((prev) =>
       prev.map((c, i) => (i === idx ? { ...c, status: "live", turns: [], revealed: 0 } : c)),
@@ -448,19 +448,16 @@ export function BatchCallSimulator({ patient, providers, preferences, onReset, o
   async function runAll() {
     setPhase("running");
     cancelRef.current = false;
-    const pending = providers.map((p, i) => ({
-      i,
-      p,
-      promise: prepareDialog(p).then((d) => ({ i, p, d })),
-    }));
-    while (pending.length > 0) {
+    // Run sequentially so Mara can tell each subsequent office which times
+    // are already taken (≥60-min spacing on the same day) and ask for a
+    // non-conflicting slot up front instead of needing a callback later.
+    const bookedSlots: string[] = [];
+    for (let i = 0; i < providers.length; i++) {
       if (cancelRef.current) return;
-      const { i, d } = await Promise.race(pending.map((item) => item.promise));
-      const doneIdx = pending.findIndex((item) => item.i === i);
-      if (doneIdx >= 0) pending.splice(doneIdx, 1);
       setActiveIdx(i);
+      const dialog = await prepareDialog(providers[i], { busy_slots: [...bookedSlots] });
       if (cancelRef.current) return;
-      if (!d) {
+      if (!dialog) {
         setCalls((prev) =>
           prev.map((c, idx) =>
             idx === i ? { ...c, status: "done", outcome: { kind: "no_availability" } } : c,
@@ -468,7 +465,10 @@ export function BatchCallSimulator({ patient, providers, preferences, onReset, o
         );
         continue;
       }
-      await playDialog(i, providers[i], d);
+      await playDialog(i, providers[i], dialog);
+      if (dialog.outcome.kind === "offered") {
+        bookedSlots.push((dialog.outcome as { slot: string }).slot);
+      }
     }
     setPhase("finished");
   }
