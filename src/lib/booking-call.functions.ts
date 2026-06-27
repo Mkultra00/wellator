@@ -90,14 +90,34 @@ export const generateBookingDialog = createServerFn({ method: "POST" })
       prefs.preferred_locations ? ` near ${prefs.preferred_locations}` : ""
     }${prefs.notes ? `. Notes: ${prefs.notes}` : ""}`;
 
-    const system = `You generate realistic short phone-call transcripts between Mara (an AI care navigator calling on behalf of a patient) and a receptionist at a doctor's office. Output ONLY valid JSON matching: {"turns":[{"speaker":"mara"|"office","text":"..."}], "outcome": {"kind":"offered","slot":"...","prep":[{"text":"...","category":"bring"|"pcp_send"|"lab"|"imaging"|"cardiac"|"in_office"|"other","bookable":true|false}]} | {"kind":"voicemail"} | {"kind":"no_availability"}}. 6-12 turns. Natural, concise spoken lines (1-2 sentences each). In her OPENING turn Mara must: identify herself as an AI care navigator, name the patient, name the referring primary care doctor (if provided), and state the patient's insurance payer + plan (if provided). Then request an appointment matching preferences. If this is a CALLBACK (the user prompt will say so), Mara opens by saying she's calling back about the previously offered slot, explains the patient asked to reschedule and gives the reason (day vs time), and asks for an alternative that fits. When the office OFFERS a slot, BEFORE the call wraps Mara must ask: "Is there anything the patient should bring or have done before the visit — referral, recent records, bloodwork, imaging, EKG?" The receptionist answers with 1-4 specific prep items appropriate to the specialty (e.g. cardiology often wants a recent EKG + lipid panel; orthopedics wants recent imaging of the affected joint; GI may want fasting bloodwork; many want a referral from PCP + photo ID + insurance card + medication list). For each item, encode it in outcome.prep with the correct category and set bookable=true ONLY if it requires a separate appointment somewhere else (lab draw, imaging center, outpatient EKG). If the specialist will do it in their office, use category "in_office" and bookable=false. Receptionist either offers a specific slot (day + time), says no availability for ~2 weeks, or it's a voicemail (then only 1-2 turns, Mara leaves a message, no prep). Vary outcomes naturally — ~65% offered, ~20% no_availability, ~15% voicemail.`;
+    const system = `You generate realistic short phone-call transcripts between Mara (an AI care navigator calling on behalf of a patient) and a receptionist at a doctor's office. Output ONLY valid JSON matching: {"turns":[{"speaker":"mara"|"office","text":"..."}], "outcome": {"kind":"offered","slot":"...","prep":[{"text":"...","category":"bring"|"pcp_send"|"lab"|"imaging"|"cardiac"|"in_office"|"other","bookable":true|false}]} | {"kind":"voicemail"} | {"kind":"no_availability"}}. 6-12 turns. Natural, concise spoken lines (1-2 sentences each).
 
-    const insLine = data.insurance
-      ? `Insurance: ${data.insurance.payer ?? "Unknown payer"}${data.insurance.plan ? ` — ${data.insurance.plan}` : ""}${data.insurance.member_id ? ` (member ${data.insurance.member_id})` : ""}${data.insurance.referral_required ? " — referral required" : ""}`
+CRITICAL FACT-USE RULES — do NOT invent or alter patient facts:
+- Use the patient name, referring primary care doctor, insurance payer, plan, and member id EXACTLY as given in the user message. Copy them verbatim — never substitute other doctor names, payers (Aetna/BCBS/UHC/Medicare/etc.), or plan names.
+- If a field is marked "not on file" or "self-referral", say that — do not make one up.
+- Mara's FIRST turn MUST use the prebuilt OPENING_LINE provided in the user message verbatim. You may append one short sentence requesting the appointment, but do not change the patient/PCP/insurance wording.
+
+If this is a CALLBACK (the user prompt will say so), Mara's opening instead references the previously offered slot, explains the patient asked to reschedule with the reason (day vs time), and asks for an alternative — still using the exact patient name, PCP, and insurance from the user message.
+
+When the office OFFERS a slot, BEFORE the call wraps Mara must ask: "Is there anything the patient should bring or have done before the visit — referral, recent records, bloodwork, imaging, EKG?" The receptionist answers with 1-4 specific prep items appropriate to the specialty (e.g. cardiology often wants a recent EKG + lipid panel; orthopedics wants recent imaging of the affected joint; GI may want fasting bloodwork; many want a referral from PCP + photo ID + insurance card + medication list). Encode each in outcome.prep; bookable=true ONLY if it needs a separate appointment elsewhere (lab draw, imaging center, outpatient EKG). If the specialist will do it in-office, use category "in_office" and bookable=false. Otherwise: no availability for ~2 weeks, or voicemail (1-2 turns, no prep). Vary outcomes ~65% offered / ~20% no_availability / ~15% voicemail.`;
+
+    const payer = data.insurance?.payer ?? null;
+    const plan = data.insurance?.plan ?? null;
+    const memberId = data.insurance?.member_id ?? null;
+    const referralReq = data.insurance?.referral_required ? " Referral is required under this plan." : "";
+    const insLine = payer
+      ? `Insurance: ${payer}${plan ? ` — ${plan}` : ""}${memberId ? ` (member ${memberId})` : ""}${data.insurance?.referral_required ? " — referral required" : ""}`
       : "Insurance: not on file";
     const refLine = data.referring_doctor
       ? `Referred by: ${data.referring_doctor}`
       : "Referred by: self-referral (no PCP on file)";
+
+    const firstName = data.patient_name.split(" ")[0];
+    const openingLine = `Hi, this is Mara, an AI care navigator calling on behalf of ${data.patient_name}. ${
+      data.referring_doctor
+        ? `${firstName} was referred by ${data.referring_doctor}`
+        : `${firstName} is self-referred`
+    }, and ${firstName}'s insurance is ${payer ?? "not on file"}${plan ? ` (${plan})` : ""}${memberId ? `, member ID ${memberId}` : ""}.${referralReq}`;
 
     const recallLine = data.recall_reason
       ? `\n*** CALLBACK *** Previously offered: ${data.previous_slot ?? "an earlier slot"}. Patient asked to reschedule. Reason: ${data.recall_reason}. Mara must reference this and request a different ${/(day|date|weekday)/i.test(data.recall_reason) ? "day" : "time"} that still fits preferences.`
@@ -107,7 +127,10 @@ export const generateBookingDialog = createServerFn({ method: "POST" })
 ${refLine}
 ${insLine}
 Calling: ${data.provider_name}, ${data.provider_specialty} — ${data.provider_location}
-${prefLine}${recallLine}`;
+${prefLine}${recallLine}
+
+OPENING_LINE (Mara's first turn must use this verbatim, then optionally add one short sentence requesting the appointment):
+"${openingLine}"`;
 
 
     const res = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
@@ -137,13 +160,21 @@ ${prefLine}${recallLine}`;
     } catch {
       throw new Error("Bad JSON from model");
     }
+    const turns = Array.isArray(parsed.turns) ? parsed.turns : [];
+    // Hard guarantee: Mara's first spoken turn uses the canonical opening line
+    // so insurance + referring PCP are always consistent with the patient profile.
+    const firstMaraIdx = turns.findIndex((t) => t?.speaker === "mara");
+    if (firstMaraIdx >= 0 && !data.recall_reason) {
+      turns[firstMaraIdx] = { speaker: "mara", text: openingLine };
+    }
     return {
-      turns: Array.isArray(parsed.turns) ? parsed.turns : [],
+      turns,
       outcome: parsed.outcome ?? { kind: "no_availability" },
       office_voice_id: pickOfficeVoice(data.provider_name),
       mara_voice_id: MARA_VOICE,
     };
   });
+
 
 export const synthesizeVoice = createServerFn({ method: "POST" })
   .inputValidator((d) =>
