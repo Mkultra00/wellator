@@ -169,21 +169,7 @@ OPENING_LINE (Mara's first turn must use this verbatim, then optionally add one 
 "${canonicalOpeningLine}"`;
 
 
-    const res = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "Lovable-API-Key": apiKey,
-      },
-      body: JSON.stringify({
-        model: "google/gemini-3.5-flash",
-        messages: [
-          { role: "system", content: system },
-          { role: "user", content: user },
-        ],
-        response_format: { type: "json_object" },
-      }),
-    });
+    const res = await callLLM(apiKey, system, user);
     if (!res.ok) {
       const t = await res.text().catch(() => "");
       // Gracefully degrade so the simulator can continue with a transcript-only
