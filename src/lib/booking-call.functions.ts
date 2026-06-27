@@ -334,11 +334,15 @@ SCHEDULING CONFLICTS — the user message may list BUSY_SLOTS the patient alread
       ? `\n*** CALLBACK *** Previously offered: ${data.previous_slot ?? "an earlier slot"}. Patient asked to reschedule. Reason: ${data.recall_reason}. Mara must use the OPENING_LINE verbatim and request a different ${/(day|date|weekday)/i.test(data.recall_reason) ? "day" : "time"} that still fits preferences.`
       : "";
 
+    const busyLine = (data.busy_slots && data.busy_slots.length)
+      ? `\nBUSY_SLOTS (already booked for this patient — DO NOT offer or book any slot within 60 minutes of these on the same day; prefer a different day):\n- ${data.busy_slots.join("\n- ")}`
+      : "";
+
     const user = `Patient: ${data.patient_name}
 ${refLine}
 ${insLine}
 Calling: ${data.provider_name}, ${data.provider_specialty} — ${data.provider_location}
-${prefLine}${recallLine}
+${prefLine}${recallLine}${busyLine}
 
 OPENING_LINE (Mara's first turn must use this verbatim, then optionally add one short sentence requesting the appointment):
 "${canonicalOpeningLine}"`;
