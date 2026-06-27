@@ -600,12 +600,14 @@ export function BatchCallSimulator({ patient, providers, preferences, onReset, o
           preferences={preferences}
           bestIdx={best}
           confirmedIdx={confirmedIdx}
+          escalations={escalations}
           onAccept={confirmBooking}
           onRecall={recallOne}
           onCancel={cancelOne}
           onPickMore={onReset}
         />
       )}
+
     </Card>
   );
 }
