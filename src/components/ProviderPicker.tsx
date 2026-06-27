@@ -89,8 +89,7 @@ export function ProviderPicker({ selectedIds, onChange, onConfirm }: Props) {
   }
 
   function confirm() {
-    const pool = [primary, ...specialists].filter(Boolean) as PickedProvider[];
-    const picked = pool.filter((p) => selectedSet.has(p.id));
+    const picked = specialists.filter((p) => selectedSet.has(p.id));
     if (picked.length > 0) onConfirm(picked);
   }
 
