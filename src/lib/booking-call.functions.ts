@@ -28,6 +28,46 @@ export function pickOfficeVoice(seed: string) {
 
 export const MARA_VOICE_ID = MARA_VOICE;
 
+/**
+ * LLM call — prefers Baseten (DeepSeek V4 Pro) when BASETEN_API_KEY is set,
+ * falls back to Lovable AI Gateway (gemini-3.5-flash).
+ */
+async function callLLM(lovableKey: string, system: string, user: string): Promise<Response> {
+  const basetenKey = process.env.BASETEN_API_KEY;
+  if (basetenKey) {
+    const res = await fetch("https://inference.baseten.co/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${basetenKey}`,
+      },
+      body: JSON.stringify({
+        model: "deepseek-ai/DeepSeek-V4-Pro",
+        messages: [
+          { role: "system", content: system },
+          { role: "user", content: user },
+        ],
+        response_format: { type: "json_object" },
+      }),
+    });
+    if (res.ok) return res;
+    const t = await res.text().catch(() => "");
+    console.warn(`[callLLM] Baseten ${res.status}: ${t.slice(0, 200)} — falling back to Lovable gateway`);
+  }
+  return fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "Lovable-API-Key": lovableKey },
+    body: JSON.stringify({
+      model: "google/gemini-3.5-flash",
+      messages: [
+        { role: "system", content: system },
+        { role: "user", content: user },
+      ],
+      response_format: { type: "json_object" },
+    }),
+  });
+}
+
 const DialogInput = z.object({
   patient_id: z.string().min(1).optional(),
   patient_name: z.string(),
@@ -169,21 +209,7 @@ OPENING_LINE (Mara's first turn must use this verbatim, then optionally add one 
 "${canonicalOpeningLine}"`;
 
 
-    const res = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "Lovable-API-Key": apiKey,
-      },
-      body: JSON.stringify({
-        model: "google/gemini-3.5-flash",
-        messages: [
-          { role: "system", content: system },
-          { role: "user", content: user },
-        ],
-        response_format: { type: "json_object" },
-      }),
-    });
+    const res = await callLLM(apiKey, system, user);
     if (!res.ok) {
       const t = await res.text().catch(() => "");
       // Gracefully degrade so the simulator can continue with a transcript-only
@@ -356,18 +382,7 @@ export const generatePatientConfirmDialog = createServerFn({ method: "POST" })
       .join("\n");
     const user = `Patient: ${data.patient_name}\nOffers secured:\n${offerLines}`;
 
-    const res = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "Lovable-API-Key": apiKey },
-      body: JSON.stringify({
-        model: "google/gemini-3.5-flash",
-        messages: [
-          { role: "system", content: system },
-          { role: "user", content: user },
-        ],
-        response_format: { type: "json_object" },
-      }),
-    });
+    const res = await callLLM(apiKey, system, user);
     if (!res.ok) {
       const t = await res.text().catch(() => "");
       console.warn(`[generatePatientConfirmDialog] Gateway ${res.status}: ${t}`);
