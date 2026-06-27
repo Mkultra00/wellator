@@ -339,17 +339,6 @@ export function BatchCallSimulator({ patient, providers, preferences, onReset, o
         </div>
       </div>
 
-      {phase === "idle" && (
-        <div className="flex items-center gap-3 border-b border-border bg-background p-4">
-          <Button onClick={runAll} className="gap-2">
-            <Play className="h-4 w-4" /> Start batch calls
-          </Button>
-          <span className="text-xs text-muted-foreground">
-            Mara and the office receptionists are both AI voices — sit back and listen.
-          </span>
-        </div>
-      )}
-
       <div className="divide-y divide-border">
         {calls.map((c, i) => (
           <CallRow
@@ -364,6 +353,16 @@ export function BatchCallSimulator({ patient, providers, preferences, onReset, o
           />
         ))}
       </div>
+
+      {(phase === "confirming" || phase === "confirmed") && (
+        <PatientConfirmPanel
+          patientName={patient.full_name}
+          turns={confirmTurns}
+          revealed={confirmRevealed}
+          isLive={phase === "confirming"}
+          email={emailSent}
+        />
+      )}
 
       {allDone && (
         <FinalReport
@@ -380,6 +379,78 @@ export function BatchCallSimulator({ patient, providers, preferences, onReset, o
     </Card>
   );
 }
+
+function PatientConfirmPanel({
+  patientName,
+  turns,
+  revealed,
+  isLive,
+  email,
+}: {
+  patientName: string;
+  turns: ConfirmTurn[];
+  revealed: number;
+  isLive: boolean;
+  email: { to: string; subject: string; body: string } | null;
+}) {
+  const visible = turns.slice(0, revealed);
+  return (
+    <div className="border-t-2 border-border bg-primary/5 p-4">
+      <div className="mb-2 flex items-center gap-2">
+        <UserRound className="h-4 w-4 text-primary" />
+        <div className="text-sm font-semibold uppercase tracking-wider">
+          Mara → {patientName}
+        </div>
+        {isLive ? (
+          <Badge variant="outline" className="text-xs">
+            <Loader2 className="mr-1 h-3 w-3 animate-spin" /> Confirming with patient
+          </Badge>
+        ) : (
+          <Badge variant="secondary" className="text-xs">
+            <CheckCircle2 className="mr-1 h-3 w-3" /> Patient confirmed
+          </Badge>
+        )}
+      </div>
+
+      {visible.length > 0 && (
+        <div className="space-y-2 rounded-md border border-border bg-background p-3">
+          {visible.map((t, i) => (
+            <div
+              key={i}
+              className={cn(
+                "rounded px-2 py-1.5 text-sm",
+                t.speaker === "mara" ? "bg-primary/10" : "bg-muted",
+              )}
+            >
+              <div className="mb-0.5 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+                {t.speaker === "mara" ? "Mara" : patientName}
+              </div>
+              {t.text}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {email && (
+        <div className="mt-3 rounded-md border border-border bg-background p-3">
+          <div className="mb-1 flex items-center gap-2 text-xs uppercase tracking-wider text-muted-foreground">
+            <Mail className="h-3.5 w-3.5" /> Confirmation email sent
+          </div>
+          <div className="text-xs text-muted-foreground">
+            <span className="font-medium text-foreground">To:</span> {email.to}
+          </div>
+          <div className="text-xs text-muted-foreground">
+            <span className="font-medium text-foreground">Subject:</span> {email.subject}
+          </div>
+          <pre className="mt-2 whitespace-pre-wrap rounded bg-muted p-2 text-xs">
+{email.body}
+          </pre>
+        </div>
+      )}
+    </div>
+  );
+}
+
 
 function FinalReport({
   calls,
