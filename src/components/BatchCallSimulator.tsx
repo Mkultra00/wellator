@@ -187,7 +187,7 @@ export function BatchCallSimulator({ patient, providers, preferences, onReset, o
         };
         utterance.onend = finish;
         utterance.onerror = finish;
-        window.setTimeout(finish, Math.min(4500, Math.max(1800, text.length * 28)));
+        window.setTimeout(finish, Math.min(2500, Math.max(1200, text.length * 18)));
         window.speechSynthesis.speak(utterance);
       } catch {
         resolve();
@@ -324,10 +324,10 @@ export function BatchCallSimulator({ patient, providers, preferences, onReset, o
     for (let t = 0; t < dialog.turns.length; t++) {
       if (cancelRef.current) return;
       const turn = dialog.turns[t];
-      const voiceId = turn.speaker === "mara" ? dialog.mara_voice_id : dialog.office_voice_id;
-      const audio = await ttsWithTimeout(turn.text, voiceId);
-      if (audio) await playAudio(audio.audio_base64);
-      else await speakWithBrowser(turn.text, turn.speaker);
+      // For the mock booking batch, prioritize reliability: browser speech is
+      // available immediately after the user's click and cannot stall on a
+      // third-party TTS/network timeout. The transcript is already visible.
+      await speakWithBrowser(turn.text, turn.speaker);
     }
     setCalls((prev) =>
       prev.map((c, i) => (i === idx ? { ...c, status: "done", outcome: dialog.outcome } : c)),
