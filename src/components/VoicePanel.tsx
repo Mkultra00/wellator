@@ -57,6 +57,8 @@ export function VoicePanel(props: Props) {
 }
 
 function VoicePanelInner({ patient, scenario, context, onClose }: Props) {
+  const panelRef = useRef<HTMLDivElement>(null);
+  const autoStartedRef = useRef(false);
 
   const [connecting, setConnecting] = useState(false);
   const [error, setError] = useState<string | null>(null);
