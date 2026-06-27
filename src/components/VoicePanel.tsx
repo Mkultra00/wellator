@@ -177,31 +177,32 @@ function VoicePanelInner({ patient, scenario, context, onClose }: Props) {
           : "";
         opener = `Hi, this is Mara, an AI care navigator calling on behalf of ${patient.full_name}. The referring primary care provider is ${primaryProvider}, and the insurance on file is ${insuranceSummary}. I have a batch of ${providers.length} offices to call to book a new appointment: ${list}.${prefLine} I'll work through them one at a time — starting with the first office now. Could you help me find the next available slot?`;
       }
+      const useOverrides = scenario === "new_booking";
       await conversation.startSession({
         conversationToken: token,
         connectionType: "webrtc",
-        overrides: {
-          agent: {
-            prompt: {
-              prompt: `You are Mara, a warm, patient AI care navigator helping elderly patients with healthcare tasks. Keep sentences short, clear, and reassuring. Current demo patient profile: patient_name={{patient_name}}; primary_provider={{primary_provider}}; insurance_summary={{insurance_summary}}. Use those patient profile variables exactly as given. If asked about the patient's profile, call get_patient_profile before answering. For this demo, the patient has a primary care referrer and insurance on file. Never describe the patient as self-referred, having no referrer, having no insurance, or insurance not being on file.`,
-            },
-            language: "en",
-          },
-        },
-        dynamicVariables: {
-          patient_id: patient.id,
-          patient_name: patient.full_name,
-          primary_provider: primaryProvider,
-          insurance_summary: insuranceSummary,
-          preferred_language: (voiceContext as any).preferred_language ?? patient.preferred_language,
-          accessibility_notes: (voiceContext as any).accessibility_notes ?? patient.accessibility_notes ?? "",
-          scenario,
-          scenario_label: SCENARIO_LABEL[scenario],
-          opener,
-          context_json: JSON.stringify({ ...(context ?? {}), demo_patient_profile: voiceContext }),
-          app_help: `Mara can help you use this app. To book an appointment, tap "Book an appointment" and pick doctors your primary care doctor suggested. Mara will call the offices and report back. To review past or upcoming calls, tap "Scheduled calls". To change patients, use the menu at the top right. You can also upload a bill or insurance photo during this chat and Mara will explain it.`,
-        },
+        ...(useOverrides
+          ? {
+              overrides: {
+                agent: {
+                  prompt: {
+                    prompt: `You are Mara, a warm, patient AI care navigator helping elderly patients with healthcare tasks. Keep sentences short, clear, and reassuring. Current demo patient profile: patient_name=${patient.full_name}; primary_provider=${primaryProvider}; insurance_summary=${insuranceSummary}. Use those patient profile variables exactly as given. If asked about the patient's profile, call get_patient_profile before answering. For this demo, the patient has a primary care referrer and insurance on file. Never describe the patient as self-referred, having no referrer, having no insurance, or insurance not being on file.`,
+                  },
+                  language: "en",
+                },
+              },
+            }
+          : {}),
       });
+
+      // Inject context after connect (works without overrides allow-listing).
+      const contextMsg = `Patient: ${patient.full_name}. Primary care provider on file: ${primaryProvider}. Insurance on file: ${insuranceSummary}. Scenario: ${SCENARIO_LABEL[scenario]}. ${opener}`;
+      setTimeout(() => {
+        try {
+          conversation.sendContextualUpdate?.(contextMsg);
+        } catch {}
+      }, 800);
+
     } catch (e) {
       const message = e instanceof Error ? e.message : "Failed to start";
       setError(message);
