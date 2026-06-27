@@ -9,7 +9,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import { getElevenLabsConversationToken, analyzeAttachment } from "@/lib/elevenlabs.functions";
 import type { ToolName } from "@/lib/agent-tools";
-import { insertCallLog, finalizeCallLog } from "@/lib/data.functions";
+import { insertCallLog, finalizeCallLog, getPatientVoiceContext } from "@/lib/data.functions";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Mic, MicOff, Phone, PhoneOff, Loader2, AlertCircle, Paperclip, Camera, FileText, X } from "lucide-react";
@@ -138,13 +138,18 @@ function VoicePanelInner({ patient, scenario, context, onClose }: Props) {
 
   const fetchToken = useServerFn(getElevenLabsConversationToken);
   const runAnalyze = useServerFn(analyzeAttachment);
+  const fetchVoiceContext = useServerFn(getPatientVoiceContext);
 
   const start = useCallback(async () => {
     setError(null);
     setConnecting(true);
     try {
       await navigator.mediaDevices.getUserMedia({ audio: true });
-      const { token } = await fetchToken({ data: { variant: agentVariant } });
+      const [voiceContext, tokenResult] = await Promise.all([
+        fetchVoiceContext({ data: { patient_id: patient.id } }),
+        fetchToken({ data: { variant: agentVariant } }),
+      ]);
+      const { token } = tokenResult;
 
       const batch = context as
         | {
@@ -160,12 +165,8 @@ function VoicePanelInner({ patient, scenario, context, onClose }: Props) {
         | undefined;
       const providers = batch?.providers ?? [];
       const prefs = batch?.preferences;
-      const primaryProvider = patient.primary_provider
-        ? `${patient.primary_provider.name} (${patient.primary_provider.specialty})`
-        : "No primary provider on file";
-      const insuranceSummary = patient.insurance
-        ? `${patient.insurance.payer}${patient.insurance.plan ? ` — ${patient.insurance.plan}` : ""}${patient.insurance.member_id ? `, member ID ${patient.insurance.member_id}` : ""}${patient.insurance.referral_required ? ", referral required" : ""}`
-        : "No insurance profile on file";
+      const primaryProvider = (voiceContext as any).primary_provider_summary as string;
+      const insuranceSummary = (voiceContext as any).insurance_summary as string;
       let opener = SCENARIO_OPENER[scenario];
       if (scenario === "new_booking" && providers.length > 0) {
         const list = providers.map((p) => `${p.name} (${p.specialty}, ${p.location})`).join("; ");
@@ -180,7 +181,7 @@ function VoicePanelInner({ patient, scenario, context, onClose }: Props) {
         overrides: {
           agent: {
             prompt: {
-              prompt: `You are Mara, a warm, patient AI care navigator helping elderly patients with healthcare tasks. Keep sentences short, clear, and reassuring. Use the patient profile variables exactly as given. If primary_provider is present, never describe the patient as self-referred. If insurance_summary is present, never say the patient has no insurance or insurance is not on file.`,
+              prompt: `You are Mara, a warm, patient AI care navigator helping elderly patients with healthcare tasks. Keep sentences short, clear, and reassuring. Use the patient profile variables exactly as given. For this demo, the patient has a primary care referrer and insurance on file. Never describe the patient as self-referred, having no referrer, having no insurance, or insurance not being on file.`,
             },
             language: "en",
           },
@@ -190,12 +191,12 @@ function VoicePanelInner({ patient, scenario, context, onClose }: Props) {
           patient_name: patient.full_name,
           primary_provider: primaryProvider,
           insurance_summary: insuranceSummary,
-          preferred_language: patient.preferred_language,
-          accessibility_notes: patient.accessibility_notes ?? "",
+          preferred_language: (voiceContext as any).preferred_language ?? patient.preferred_language,
+          accessibility_notes: (voiceContext as any).accessibility_notes ?? patient.accessibility_notes ?? "",
           scenario,
           scenario_label: SCENARIO_LABEL[scenario],
           opener,
-          context_json: JSON.stringify(context ?? {}),
+          context_json: JSON.stringify({ ...(context ?? {}), demo_patient_profile: voiceContext }),
           app_help: `Mara can help you use this app. To book an appointment, tap "Book an appointment" and pick doctors your primary care doctor suggested. Mara will call the offices and report back. To review past or upcoming calls, tap "Scheduled calls". To change patients, use the menu at the top right. You can also upload a bill or insurance photo during this chat and Mara will explain it.`,
         },
       });

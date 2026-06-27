@@ -174,6 +174,7 @@ export function BatchCallSimulator({ patient, providers, preferences, onReset, o
       dialog = await genDialog({
         data: {
           patient_name: patient.full_name,
+          patient_id: patient.id,
           provider_name: provider.name,
           provider_specialty: provider.specialty,
           provider_location: provider.location,

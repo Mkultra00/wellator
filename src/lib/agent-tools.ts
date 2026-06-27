@@ -5,20 +5,18 @@
  * Demo mode: queries run with the anon Supabase client (open RLS).
  * Swap-in for prod: scope to auth.uid() and tighten policies.
  */
-import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+import type { SupabaseClient } from "@supabase/supabase-js";
 
-function getServerSupabase(): SupabaseClient {
-  const url = process.env.SUPABASE_URL!;
-  const key = process.env.SUPABASE_PUBLISHABLE_KEY!;
-  return createClient(url, key, {
-    auth: { persistSession: false, autoRefreshToken: false },
-  });
+async function getServerSupabase(): Promise<SupabaseClient> {
+  const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+  return supabaseAdmin as SupabaseClient;
 }
 
 export type ToolName =
   | "find_providers"
   | "check_availability"
   | "book_appointment"
+  | "get_patient_profile"
   | "get_appointments"
   | "get_insurance_summary"
   | "get_billing_summary"
@@ -27,12 +25,13 @@ export type ToolName =
 export async function runTool(
   name: ToolName,
   params: Record<string, unknown>,
-  supabase: SupabaseClient = getServerSupabase(),
+  supabase?: SupabaseClient,
 ): Promise<unknown> {
+  const db = supabase ?? (await getServerSupabase());
   switch (name) {
     case "find_providers": {
       const { specialty, location } = params as { specialty?: string; location?: string };
-      let q = supabase.from("providers").select("id,name,specialty,location,accepts_insurance");
+      let q = db.from("providers").select("id,name,specialty,location,accepts_insurance");
       if (specialty) q = q.ilike("specialty", `%${specialty}%`);
       if (location) q = q.ilike("location", `%${location}%`);
       const { data, error } = await q.limit(10);
@@ -45,7 +44,7 @@ export async function runTool(
         earliest_date?: string;
       };
       const start = earliest_date ?? new Date().toISOString();
-      const { data, error } = await supabase
+      const { data, error } = await db
         .from("slots")
         .select("id,starts_at,ends_at")
         .eq("provider_id", provider_id)
@@ -63,7 +62,7 @@ export async function runTool(
         reason?: string;
       };
       // Conditional update: only book if still open (prevents double-book).
-      const { data: slotRow, error: slotErr } = await supabase
+      const { data: slotRow, error: slotErr } = await db
         .from("slots")
         .update({ status: "booked" })
         .eq("id", slot_id)
@@ -73,13 +72,13 @@ export async function runTool(
       if (slotErr) throw slotErr;
       if (!slotRow) return { ok: false, reason: "slot_no_longer_available" };
 
-      const { data: insuranceRow } = await supabase
+      const { data: insuranceRow } = await db
         .from("insurance_profiles")
         .select("payer,plan,member_id")
         .eq("patient_id", patient_id)
         .maybeSingle();
 
-      const { data: appt, error: apptErr } = await supabase
+      const { data: appt, error: apptErr } = await db
         .from("appointments")
         .insert({
           patient_id,
@@ -95,11 +94,43 @@ export async function runTool(
       if (apptErr) throw apptErr;
       return { ok: true, appointment_id: appt.id, starts_at: appt.starts_at };
     }
+    case "get_patient_profile": {
+      const { patient_id } = params as { patient_id: string };
+      const { data, error } = await db
+        .from("patients")
+        .select(
+          "id,full_name,preferred_language,accessibility_notes,primary_provider:providers!patients_primary_provider_id_fkey(name,specialty,clinic_address),insurance_profiles(payer,plan,member_id,group_id,referral_required)",
+        )
+        .eq("id", patient_id)
+        .maybeSingle();
+      if (error) throw error;
+      const insuranceProfiles = (data as any)?.insurance_profiles;
+      const insurance = Array.isArray(insuranceProfiles)
+        ? insuranceProfiles[0] ?? null
+        : insuranceProfiles ?? null;
+      const primary = (data as any)?.primary_provider ?? null;
+      return {
+        patient: data
+          ? {
+              id: (data as any).id,
+              full_name: (data as any).full_name,
+              primary_provider: primary,
+              insurance,
+              primary_provider_summary: primary
+                ? `${primary.name} (${primary.specialty})`
+                : "primary care provider on file in demo profile",
+              insurance_summary: insurance?.payer
+                ? `${insurance.payer}${insurance.plan ? ` — ${insurance.plan}` : ""}${insurance.member_id ? `, member ID ${insurance.member_id}` : ""}${insurance.referral_required ? ", referral required" : ""}`
+                : "insurance on file in demo profile",
+            }
+          : null,
+      };
+    }
     case "get_appointments": {
       const { patient_id } = params as { patient_id: string };
       // Booked appointments live in call_logs (scenario='booking_call'),
       // saved by the BatchCallSimulator. outcome is a JSON string.
-      const { data, error } = await supabase
+      const { data, error } = await db
         .from("call_logs")
         .select("id,started_at,outcome,transcript")
         .eq("patient_id", patient_id)
@@ -130,7 +161,7 @@ export async function runTool(
     }
     case "get_insurance_summary": {
       const { patient_id } = params as { patient_id: string };
-      const { data, error } = await supabase
+      const { data, error } = await db
         .from("insurance_profiles")
         .select("payer,plan,member_id,referral_required,copay_cents")
         .eq("patient_id", patient_id)
@@ -140,7 +171,7 @@ export async function runTool(
     }
     case "get_billing_summary": {
       const { patient_id, bill_id } = params as { patient_id: string; bill_id?: string };
-      let q = supabase
+      let q = db
         .from("bills")
         .select("id,amount_cents,status,line_items,issued_at,eobs(payer_paid_cents,patient_responsibility_cents,denial_reason,plain_language_summary)")
         .eq("patient_id", patient_id);
@@ -155,7 +186,7 @@ export async function runTool(
         reason: string;
         session_id?: string;
       };
-      const { error } = await supabase
+      const { error } = await db
         .from("call_logs")
         .update({ human_transfer_requested: true, transfer_reason: reason })
         .eq("agent_session_id", session_id ?? "")
