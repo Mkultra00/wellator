@@ -70,20 +70,27 @@ function scoreOutcome(o: DialogOutcome | undefined, prefs: BookingPrefs, provide
 const VISIT_MIN = 60;
 const GAP_MIN = 60;
 const BLOCK_MIN = VISIT_MIN + GAP_MIN;
-function parseSlot(slot: string | null | undefined): { start: number; end: number; label: string } | null {
+function parseSlot(
+  slot: string | null | undefined,
+): { start: number | null; end: number | null; day: string | null; minutes: number; label: string } | null {
   if (!slot) return null;
-  const m = slot.match(/([A-Za-z]+),?\s+([A-Za-z]+)\s+(\d{1,2})(?:,\s*(\d{4}))?\s+at\s+(\d{1,2}):(\d{2})\s*([AaPp][Mm])/);
-  if (!m) return null;
-  const [, , monthName, dayStr, yearStr, hStr, minStr, ampm] = m;
+  const dayMatch = slot.match(/\b(Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday)\b/i);
+  const timeMatch = slot.match(/\b(\d{1,2}):(\d{2})\s*(a\.?m\.?|p\.?m\.?)\b/i);
+  if (!timeMatch) return null;
+  const [, hStr, minStr, ampm] = timeMatch;
+  let h = parseInt(hStr, 10) % 12;
+  if (/p/i.test(ampm)) h += 12;
+  const minutes = h * 60 + parseInt(minStr, 10);
+  const dateMatch = slot.match(/\b([A-Za-z]+)\s+(\d{1,2})(?:,\s*(\d{4}))?\b/);
+  if (!dateMatch) return { start: null, end: null, day: dayMatch?.[1]?.toLowerCase() ?? null, minutes, label: slot };
+  const [, monthName, dayStr, yearStr] = dateMatch;
   const months = ["january","february","march","april","may","june","july","august","september","october","november","december"];
   const mi = months.indexOf(monthName.toLowerCase());
-  if (mi < 0) return null;
-  let h = parseInt(hStr, 10) % 12;
-  if (ampm.toUpperCase() === "PM") h += 12;
+  if (mi < 0) return { start: null, end: null, day: dayMatch?.[1]?.toLowerCase() ?? null, minutes, label: slot };
   const year = yearStr ? parseInt(yearStr, 10) : new Date().getFullYear();
   const d = new Date(year, mi, parseInt(dayStr, 10), h, parseInt(minStr, 10));
   const start = d.getTime();
-  return { start, end: start + VISIT_MIN * 60_000, label: slot };
+  return { start, end: start + VISIT_MIN * 60_000, day: dayMatch?.[1]?.toLowerCase() ?? null, minutes, label: slot };
 }
 
 // True when two slots are on the same day AND their start times are < 60 min
@@ -91,7 +98,15 @@ function parseSlot(slot: string | null | undefined): { start: number; end: numbe
 function slotsOverlap(a: string | null | undefined, b: string | null | undefined): boolean {
   const pa = parseSlot(a); const pb = parseSlot(b);
   if (!pa || !pb) return false;
-  return Math.abs(pa.start - pb.start) < BLOCK_MIN * 60_000;
+  if (pa.start != null && pb.start != null) return Math.abs(pa.start - pb.start) < BLOCK_MIN * 60_000;
+  return !!pa.day && pa.day === pb.day && Math.abs(pa.minutes - pb.minutes) < BLOCK_MIN;
+}
+
+function collectBookedSlots(callList: CallState[]) {
+  return callList
+    .filter((c) => c.outcome?.kind === "offered")
+    .map((c) => (c.outcome as { slot: string }).slot)
+    .filter(Boolean);
 }
 
 type Props = {
@@ -468,14 +483,13 @@ export function BatchCallSimulator({ patient, providers, preferences, onReset, o
         );
         continue;
       }
-      await playDialog(i, providers[i], dialog);
       if (dialog.outcome.kind === "offered") {
         const offeredSlot = (dialog.outcome as { slot: string }).slot;
         const conflictWith = bookedSlots.find((b) => slotsOverlap(offeredSlot, b));
         if (conflictWith) {
-          // Office offered (and we "booked") a slot that collides with a
-          // previously secured appointment. Refuse it client-side so Mara
-          // never holds two overlapping/too-close visits in memory.
+          // Office offered a slot that collides with a previously secured
+          // appointment. Do not play/accept that call; Mara calls back first
+          // and asks for a different day or a time at least an hour away.
           toast.warning(
             `${providers[i].name} offered ${offeredSlot}, which conflicts with ${conflictWith}. Mara will call back for a different day or time.`,
           );
@@ -486,13 +500,11 @@ export function BatchCallSimulator({ patient, providers, preferences, onReset, o
                 : c,
             ),
           );
-          // Immediate callback with the busy slots so we get a clean offer.
           await runOne(i, providers[i], {
             recall_reason: `conflicts with the patient's existing appointment at ${conflictWith} — need a different day, or at least 60 minutes away on the same day`,
             previous_slot: offeredSlot,
             busy_slots: [...bookedSlots],
           });
-          // Re-read the new outcome from state via a fresh ref-style read.
           const fresh = callsRef.current[i]?.outcome;
           if (fresh?.kind === "offered") {
             const freshSlot = (fresh as { slot: string }).slot;
@@ -501,8 +513,11 @@ export function BatchCallSimulator({ patient, providers, preferences, onReset, o
             }
           }
         } else {
+          await playDialog(i, providers[i], dialog);
           bookedSlots.push(offeredSlot);
         }
+      } else {
+        await playDialog(i, providers[i], dialog);
       }
     }
     setPhase("finished");
@@ -673,6 +688,7 @@ export function BatchCallSimulator({ patient, providers, preferences, onReset, o
           await runOne(existingIdx, targetProvider, {
             recall_reason: cb.reason,
             previous_slot: prevSlot,
+            busy_slots: collectBookedSlots(callsRef.current).filter((slot) => slot !== prevSlot),
           });
         });
       }
