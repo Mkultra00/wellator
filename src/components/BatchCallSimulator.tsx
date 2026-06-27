@@ -5,7 +5,7 @@
  * by the LLM as a short transcript per call, then spoken aloud turn-by-turn
  * with live transcript reveal. No human voice needed.
  */
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -19,12 +19,15 @@ import {
   ArrowRight,
   Trophy,
   Loader2,
-  Play,
+  Mail,
+  UserRound,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
   generateBookingDialog,
+  generatePatientConfirmDialog,
   synthesizeVoice,
+  type ConfirmTurn,
   type DialogTurn,
   type DialogOutcome,
 } from "@/lib/booking-call.functions";
@@ -33,6 +36,7 @@ import type { PickedProvider } from "./ProviderPicker";
 import type { BookingPrefs } from "./BookingPreferences";
 import type { Patient } from "@/lib/patient-context";
 import { toast } from "sonner";
+
 
 type CallState = {
   provider: PickedProvider;
@@ -67,15 +71,28 @@ export function BatchCallSimulator({ patient, providers, preferences, onReset, o
     providers.map((p) => ({ provider: p, status: "queued", turns: [], revealed: 0 })),
   );
   const [activeIdx, setActiveIdx] = useState(0);
-  const [phase, setPhase] = useState<"idle" | "running" | "finished">("idle");
+  const [phase, setPhase] = useState<"idle" | "running" | "finished" | "confirming" | "confirmed">(
+    "idle",
+  );
   const [confirmedIdx, setConfirmedIdx] = useState<number | null>(null);
+  const [confirmTurns, setConfirmTurns] = useState<ConfirmTurn[]>([]);
+  const [confirmRevealed, setConfirmRevealed] = useState(0);
+  const [emailSent, setEmailSent] = useState<null | {
+    to: string;
+    subject: string;
+    body: string;
+  }>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const cancelRef = useRef(false);
   const [ctx, setCtx] = useState<{ referring_doctor: string | null; insurance: any } | null>(null);
 
   const genDialog = useServerFn(generateBookingDialog);
+  const genConfirm = useServerFn(generatePatientConfirmDialog);
   const tts = useServerFn(synthesizeVoice);
   const fetchCtx = useServerFn(getBookingContext);
+
+
+  const startedRef = useRef(false);
 
   useEffect(() => {
     fetchCtx({ data: { patient_id: patient.id } })
@@ -83,7 +100,8 @@ export function BatchCallSimulator({ patient, providers, preferences, onReset, o
       .catch(() => setCtx({ referring_doctor: null, insurance: null }));
   }, [patient.id, fetchCtx]);
 
-  const allDone = phase === "finished";
+  const allDone = phase === "finished" || phase === "confirming" || phase === "confirmed";
+
 
   const best = useMemo(() => {
     if (!allDone) return null;
@@ -173,7 +191,7 @@ export function BatchCallSimulator({ patient, providers, preferences, onReset, o
     );
   }
 
-  async function runAll() {
+  const runAll = useCallback(async () => {
     setPhase("running");
     cancelRef.current = false;
     for (let i = 0; i < providers.length; i++) {
@@ -182,7 +200,91 @@ export function BatchCallSimulator({ patient, providers, preferences, onReset, o
       await runOne(i);
     }
     setPhase("finished");
-  }
+  }, [providers.length]);
+
+  // Auto-start as soon as the booking context is loaded.
+  useEffect(() => {
+    if (ctx && !startedRef.current) {
+      startedRef.current = true;
+      runAll();
+    }
+  }, [ctx, runAll]);
+
+  // After all office calls finish, if Mara secured any offers, call the patient
+  // to read them out and confirm, then "email" the confirmation.
+  useEffect(() => {
+    if (phase !== "finished") return;
+    const offers = calls
+      .filter((c) => c.outcome?.kind === "offered")
+      .map((c) => ({
+        provider_id: c.provider.id,
+        provider_name: c.provider.name,
+        specialty: c.provider.specialty,
+        location: c.provider.location,
+        slot: (c.outcome as { slot: string }).slot,
+      }));
+    if (offers.length === 0) return;
+    let cancelled = false;
+    (async () => {
+      setPhase("confirming");
+      setConfirmTurns([]);
+      setConfirmRevealed(0);
+      let confirm;
+      try {
+        confirm = await genConfirm({
+          data: { patient_name: patient.full_name, offers },
+        });
+      } catch (e) {
+        toast.error("Patient confirmation call failed", {
+          description: e instanceof Error ? e.message : "Dialog generation failed",
+        });
+        setPhase("finished");
+        return;
+      }
+      if (cancelled) return;
+      setConfirmTurns(confirm.turns);
+      for (let t = 0; t < confirm.turns.length; t++) {
+        if (cancelRef.current || cancelled) return;
+        const turn = confirm.turns[t];
+        const voiceId = turn.speaker === "mara" ? confirm.mara_voice_id : confirm.patient_voice_id;
+        let audio: { audio_base64: string } | null = null;
+        try {
+          audio = await tts({ data: { text: turn.text, voice_id: voiceId } });
+        } catch {}
+        setConfirmRevealed(t + 1);
+        if (audio) await playAudio(audio.audio_base64);
+        else await new Promise((r) => setTimeout(r, 600));
+      }
+      if (cancelled) return;
+      const accepted = new Set(confirm.outcome.accepted_provider_ids ?? []);
+      setCalls((prev) =>
+        prev.map((c) =>
+          accepted.has(c.provider.id) ? { ...c, decision: "accepted" } : c,
+        ),
+      );
+      const acceptedOffers = offers.filter((o) => accepted.has(o.provider_id));
+      const finalOffers = acceptedOffers.length > 0 ? acceptedOffers : offers;
+      const subject = `Your appointment ${finalOffers.length === 1 ? "is" : "s are"} ready to confirm`;
+      const lines = finalOffers
+        .map(
+          (o) => `• ${o.provider_name} (${o.specialty}) — ${o.slot}\n  ${o.location}`,
+        )
+        .join("\n");
+      const body = `Hi ${patient.full_name.split(" ")[0]},\n\nThis is Mara following up on our call. Please confirm the following appointment${finalOffers.length === 1 ? "" : "s"}:\n\n${lines}\n\nReply YES to confirm, or call us back and we'll find another time.\n\n— Mara, your care navigator`;
+      setEmailSent({
+        to: `${patient.full_name.toLowerCase().replace(/\s+/g, ".")}@example.com`,
+        subject,
+        body,
+      });
+      setPhase("confirmed");
+      toast.success("Confirmation email sent to patient");
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [phase, calls, genConfirm, tts, patient.full_name]);
+
+
 
   function confirmBooking(i: number) {
     setConfirmedIdx(i);
@@ -237,17 +339,6 @@ export function BatchCallSimulator({ patient, providers, preferences, onReset, o
         </div>
       </div>
 
-      {phase === "idle" && (
-        <div className="flex items-center gap-3 border-b border-border bg-background p-4">
-          <Button onClick={runAll} className="gap-2">
-            <Play className="h-4 w-4" /> Start batch calls
-          </Button>
-          <span className="text-xs text-muted-foreground">
-            Mara and the office receptionists are both AI voices — sit back and listen.
-          </span>
-        </div>
-      )}
-
       <div className="divide-y divide-border">
         {calls.map((c, i) => (
           <CallRow
@@ -262,6 +353,16 @@ export function BatchCallSimulator({ patient, providers, preferences, onReset, o
           />
         ))}
       </div>
+
+      {(phase === "confirming" || phase === "confirmed") && (
+        <PatientConfirmPanel
+          patientName={patient.full_name}
+          turns={confirmTurns}
+          revealed={confirmRevealed}
+          isLive={phase === "confirming"}
+          email={emailSent}
+        />
+      )}
 
       {allDone && (
         <FinalReport
@@ -278,6 +379,78 @@ export function BatchCallSimulator({ patient, providers, preferences, onReset, o
     </Card>
   );
 }
+
+function PatientConfirmPanel({
+  patientName,
+  turns,
+  revealed,
+  isLive,
+  email,
+}: {
+  patientName: string;
+  turns: ConfirmTurn[];
+  revealed: number;
+  isLive: boolean;
+  email: { to: string; subject: string; body: string } | null;
+}) {
+  const visible = turns.slice(0, revealed);
+  return (
+    <div className="border-t-2 border-border bg-primary/5 p-4">
+      <div className="mb-2 flex items-center gap-2">
+        <UserRound className="h-4 w-4 text-primary" />
+        <div className="text-sm font-semibold uppercase tracking-wider">
+          Mara → {patientName}
+        </div>
+        {isLive ? (
+          <Badge variant="outline" className="text-xs">
+            <Loader2 className="mr-1 h-3 w-3 animate-spin" /> Confirming with patient
+          </Badge>
+        ) : (
+          <Badge variant="secondary" className="text-xs">
+            <CheckCircle2 className="mr-1 h-3 w-3" /> Patient confirmed
+          </Badge>
+        )}
+      </div>
+
+      {visible.length > 0 && (
+        <div className="space-y-2 rounded-md border border-border bg-background p-3">
+          {visible.map((t, i) => (
+            <div
+              key={i}
+              className={cn(
+                "rounded px-2 py-1.5 text-sm",
+                t.speaker === "mara" ? "bg-primary/10" : "bg-muted",
+              )}
+            >
+              <div className="mb-0.5 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+                {t.speaker === "mara" ? "Mara" : patientName}
+              </div>
+              {t.text}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {email && (
+        <div className="mt-3 rounded-md border border-border bg-background p-3">
+          <div className="mb-1 flex items-center gap-2 text-xs uppercase tracking-wider text-muted-foreground">
+            <Mail className="h-3.5 w-3.5" /> Confirmation email sent
+          </div>
+          <div className="text-xs text-muted-foreground">
+            <span className="font-medium text-foreground">To:</span> {email.to}
+          </div>
+          <div className="text-xs text-muted-foreground">
+            <span className="font-medium text-foreground">Subject:</span> {email.subject}
+          </div>
+          <pre className="mt-2 whitespace-pre-wrap rounded bg-muted p-2 text-xs">
+{email.body}
+          </pre>
+        </div>
+      )}
+    </div>
+  );
+}
+
 
 function FinalReport({
   calls,
