@@ -53,9 +53,10 @@ const CARDS: CardDef[] = [
   },
   {
     id: "billing_explainer",
-    title: "Help me understand a bill",
-    body: "Mara reads your bill or insurance statement in plain language and explains what each charge is for.",
+    title: "Talk with Mara",
+    body: "Chat with Mara about billing, appointments, or procedures — ask anything, in plain language.",
     Icon: FileText,
+
   },
 ];
 

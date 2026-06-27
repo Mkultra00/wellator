@@ -24,7 +24,7 @@ export type Scenario = "new_booking" | "pt_followup" | "billing_explainer" | "re
 const SCENARIO_LABEL: Record<Scenario, string> = {
   new_booking: "Mara calling the doctor's office",
   pt_followup: "Physical therapy follow-up",
-  billing_explainer: "Help with a bill or benefit",
+  billing_explainer: "Talk with Mara",
   reminder: "Appointment reminder",
 };
 
@@ -34,7 +34,8 @@ const SCENARIO_OPENER: Record<Scenario, string> = {
   pt_followup:
     "Hi, this is Mara following up after your physical therapy visit. Do you have a couple of minutes for a few quick questions?",
   billing_explainer:
-    "Hi, this is Mara. I can help explain a recent bill or insurance statement in plain language. Which bill would you like to look at?",
+    "Hi, this is Mara. I'm here to talk through anything on your mind — a bill, an upcoming appointment, or a procedure. What would you like to start with?",
+
   reminder:
     "Hi, this is Mara — a friendly reminder about your upcoming visit. Would you like to confirm, reschedule, or have me answer any questions about it?",
 };
