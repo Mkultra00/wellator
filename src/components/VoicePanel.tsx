@@ -138,22 +138,6 @@ function VoicePanelInner({ patient, scenario, context, onClose }: Props) {
     transcriptRef.current = transcript;
   }, [transcript]);
 
-  // Auto-start "Talk with Mara" so the user doesn't press an extra button.
-  useEffect(() => {
-    if (scenario !== "billing_explainer") return;
-    if (autoStartedRef.current) return;
-    if (conversation.status !== "disconnected") return;
-    autoStartedRef.current = true;
-    start();
-  }, [scenario, conversation.status, start]);
-
-  // Scroll the call panel into view when the call connects.
-  useEffect(() => {
-    if (conversation.status === "connected") {
-      panelRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
-    }
-  }, [conversation.status]);
-
   const fetchToken = useServerFn(getElevenLabsConversationToken);
   const runAnalyze = useServerFn(analyzeAttachment);
 
