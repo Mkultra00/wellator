@@ -57,8 +57,23 @@ const DialogInput = z.object({
 
 
 export type DialogTurn = { speaker: "mara" | "office"; text: string };
+export type PrepItem = {
+  /** e.g. "Bring photo ID and insurance card", "Fasting bloodwork (LabCorp)", "Chest X-ray within 30 days" */
+  text: string;
+  /** how the patient handles it */
+  category:
+    | "bring" // bring with you (ID, list of meds, paperwork)
+    | "pcp_send" // ask primary care to fax / send records or referral
+    | "lab" // bloodwork — bookable
+    | "imaging" // x-ray, MRI, CT — bookable
+    | "cardiac" // EKG, stress test — bookable
+    | "in_office" // specialist will do it in office, no action needed
+    | "other";
+  /** true when the patient needs a separate appointment to get it done */
+  bookable: boolean;
+};
 export type DialogOutcome =
-  | { kind: "offered"; slot: string }
+  | { kind: "offered"; slot: string; prep?: PrepItem[] }
   | { kind: "voicemail" }
   | { kind: "no_availability" };
 
