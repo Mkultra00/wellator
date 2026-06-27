@@ -183,7 +183,7 @@ function Index() {
                           </div>
                           {prefs && (
                             <div className="text-xs text-muted-foreground">
-                              Prefers {prefs.time_of_day} · {prefs.days.join(", ")} · within{" "}
+                              Prefers {prefs.time_of_day.length ? prefs.time_of_day.join("/") : "any time"} · {prefs.days.join(", ")} · within{" "}
                               {prefs.max_distance_miles} mi
                               {prefs.preferred_locations && ` · near ${prefs.preferred_locations}`}
                             </div>

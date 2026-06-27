@@ -583,7 +583,7 @@ export function BatchCallSimulator({ patient, providers, preferences, onReset, o
             {providers.length === 1 ? "office" : "offices"} for {patient.full_name}
           </div>
           <div className="text-xs text-muted-foreground">
-            Prefers {preferences.time_of_day} · {preferences.days.join(", ") || "any day"} ·
+            Prefers {preferences.time_of_day.length ? preferences.time_of_day.join("/") : "any time"} · {preferences.days.join(", ") || "any day"} ·
             within {preferences.max_distance_miles} mi
           </div>
         </div>

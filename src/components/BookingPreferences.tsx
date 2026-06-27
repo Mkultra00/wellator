@@ -17,13 +17,14 @@ import { ArrowLeft, PhoneCall } from "lucide-react";
 export type BookingPrefs = {
   preferred_locations: string;
   days: string[];
-  time_of_day: "morning" | "afternoon" | "evening" | "any";
+  time_of_day: string[];
   max_distance_miles: number;
   notes: string;
 };
 
 const DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
-const TIMES: BookingPrefs["time_of_day"][] = ["morning", "afternoon", "evening", "any"];
+const TIMES = ["morning", "afternoon", "evening"] as const;
+
 
 type Props = {
   count: number;
@@ -35,7 +36,7 @@ export function BookingPreferences({ count, onBack, onSubmit }: Props) {
   const [prefs, setPrefs] = useState<BookingPrefs>({
     preferred_locations: "",
     days: ["Mon", "Tue", "Wed", "Thu", "Fri"],
-    time_of_day: "any",
+    time_of_day: [],
     max_distance_miles: 15,
     notes: "",
   });
@@ -46,6 +47,16 @@ export function BookingPreferences({ count, onBack, onSubmit }: Props) {
       days: p.days.includes(d) ? p.days.filter((x) => x !== d) : [...p.days, d],
     }));
   }
+
+  function toggleTime(t: string) {
+    setPrefs((p) => ({
+      ...p,
+      time_of_day: p.time_of_day.includes(t)
+        ? p.time_of_day.filter((x) => x !== t)
+        : [...p.time_of_day, t],
+    }));
+  }
+
 
   return (
     <Card className="space-y-5 p-5">
@@ -92,14 +103,14 @@ export function BookingPreferences({ count, onBack, onSubmit }: Props) {
       </div>
 
       <div className="space-y-2">
-        <Label>Time of day</Label>
+        <Label>Times of day (pick one or more)</Label>
         <div className="flex flex-wrap gap-2">
           {TIMES.map((t) => {
-            const on = prefs.time_of_day === t;
+            const on = prefs.time_of_day.includes(t);
             return (
               <Badge
                 key={t}
-                onClick={() => setPrefs((p) => ({ ...p, time_of_day: t }))}
+                onClick={() => toggleTime(t)}
                 variant={on ? "default" : "outline"}
                 className={cn("cursor-pointer px-3 py-1.5 text-sm capitalize", on ? "" : "hover:bg-muted")}
               >
@@ -108,7 +119,11 @@ export function BookingPreferences({ count, onBack, onSubmit }: Props) {
             );
           })}
         </div>
+        {prefs.time_of_day.length === 0 && (
+          <p className="text-xs text-muted-foreground">No selection = any time of day works.</p>
+        )}
       </div>
+
 
       <div className="space-y-2">
         <div className="flex items-center justify-between">

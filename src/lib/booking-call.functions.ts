@@ -48,10 +48,11 @@ const DialogInput = z.object({
   preferences: z.object({
     preferred_locations: z.string().optional().nullable(),
     days: z.array(z.string()).optional().default([]),
-    time_of_day: z.string().optional().nullable(),
+    time_of_day: z.union([z.string(), z.array(z.string())]).optional().nullable(),
     max_distance_miles: z.number().optional().nullable(),
     notes: z.string().optional().nullable(),
   }),
+
   recall_reason: z.string().optional().nullable(),
   previous_slot: z.string().optional().nullable(),
 });
@@ -110,11 +111,17 @@ export const generateBookingDialog = createServerFn({ method: "POST" })
     const insurance = demoContext?.insurance ?? data.insurance ?? null;
 
     const prefs = data.preferences;
-    const prefLine = `Preferred ${prefs.time_of_day ?? "any time"} on ${
+    const todStr = Array.isArray(prefs.time_of_day)
+      ? prefs.time_of_day.length
+        ? prefs.time_of_day.join(" or ")
+        : "any time"
+      : prefs.time_of_day ?? "any time";
+    const prefLine = `Preferred ${todStr} on ${
       (prefs.days ?? []).join(", ") || "any weekday"
     }, within ${prefs.max_distance_miles ?? "any"} miles${
       prefs.preferred_locations ? ` near ${prefs.preferred_locations}` : ""
     }${prefs.notes ? `. Notes: ${prefs.notes}` : ""}`;
+
 
     const system = `You generate realistic short phone-call transcripts between Mara (an AI care navigator calling on behalf of a patient) and a receptionist at a doctor's office. Output ONLY valid JSON matching: {"turns":[{"speaker":"mara"|"office","text":"..."}], "outcome": {"kind":"offered","slot":"...","prep":[{"text":"...","category":"bring"|"pcp_send"|"lab"|"imaging"|"cardiac"|"in_office"|"other","bookable":true|false}]} | {"kind":"voicemail"} | {"kind":"no_availability"}}. 6-12 turns. Natural, concise spoken lines (1-2 sentences each).
 
