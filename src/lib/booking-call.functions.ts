@@ -117,6 +117,103 @@ export type DialogOutcome =
   | { kind: "voicemail" }
   | { kind: "no_availability" };
 
+function stableHash(value: string) {
+  let h = 0;
+  for (let i = 0; i < value.length; i++) h = (h * 31 + value.charCodeAt(i)) | 0;
+  return Math.abs(h);
+}
+
+function choosePreferredDay(days?: string[]) {
+  const normalized = (days ?? []).filter(Boolean);
+  if (normalized.length > 0) return normalized[0];
+  return "Tuesday";
+}
+
+function choosePreferredTime(timeOfDay?: string | string[] | null) {
+  const options = Array.isArray(timeOfDay) ? timeOfDay : timeOfDay ? [timeOfDay] : [];
+  const first = options[0]?.toLowerCase() ?? "morning";
+  if (first.includes("afternoon")) return "2:30 PM";
+  if (first.includes("evening")) return "4:15 PM";
+  if (first.includes("midday") || first.includes("noon")) return "12:45 PM";
+  return "10:15 AM";
+}
+
+function nextSlot(providerName: string, preferences: z.infer<typeof DialogInput>["preferences"]) {
+  const day = choosePreferredDay(preferences.days);
+  const time = choosePreferredTime(preferences.time_of_day);
+  const offset = (stableHash(providerName) % 3) + 1;
+  return `${day}, July ${14 + offset} at ${time}`;
+}
+
+function prepForSpecialty(specialty: string): PrepItem[] {
+  const s = specialty.toLowerCase();
+  const common: PrepItem[] = [
+    { text: "Bring photo ID, insurance card, and a current medication list", category: "bring", bookable: false },
+    { text: "Ask the referring primary care doctor to send the referral and recent office notes", category: "pcp_send", bookable: false },
+  ];
+  if (s.includes("card")) {
+    return [
+      ...common,
+      { text: "Recent EKG before the visit", category: "cardiac", bookable: true },
+      { text: "Recent lipid panel bloodwork", category: "lab", bookable: true },
+    ];
+  }
+  if (s.includes("ortho")) {
+    return [
+      ...common,
+      { text: "Recent imaging for the painful joint or area", category: "imaging", bookable: true },
+    ];
+  }
+  if (s.includes("gastro") || s.includes("gi")) {
+    return [
+      ...common,
+      { text: "Fasting bloodwork before the appointment", category: "lab", bookable: true },
+    ];
+  }
+  return common;
+}
+
+function deterministicAvailabilityDialog(args: {
+  data: z.infer<typeof DialogInput>;
+  openingLine: string;
+  referringDoctor: string | null;
+  payer: string | null;
+  plan: string | null;
+  reason?: string;
+}) {
+  const slot = nextSlot(args.data.provider_name, args.data.preferences);
+  const prep = prepForSpecialty(args.data.provider_specialty);
+  const noAvailability = stableHash(`${args.data.provider_name}:${args.data.provider_specialty}`) % 5 === 0;
+  const insuranceLine = args.payer ? `${args.payer}${args.plan ? ` ${args.plan}` : ""}` : "the insurance on file";
+
+  if (noAvailability) {
+    return {
+      turns: [
+        { speaker: "mara" as const, text: `${args.openingLine} I'm calling to schedule the first available ${args.data.provider_specialty} appointment.` },
+        { speaker: "office" as const, text: `I can check that right now. I have the calendar open for ${args.data.provider_name}.` },
+        { speaker: "mara" as const, text: `The referral is from ${args.referringDoctor ?? "the primary care doctor on file"}, and the patient has ${insuranceLine}.` },
+        { speaker: "office" as const, text: "I checked the calendar live, and we do not have availability in that requested window." },
+        { speaker: "office" as const, text: "The next open appointment is about three weeks out, so I would recommend trying another specialist on the list." },
+      ],
+      outcome: { kind: "no_availability" as const },
+    };
+  }
+
+  return {
+    turns: [
+      { speaker: "mara" as const, text: `${args.openingLine} I'm calling to schedule the first available ${args.data.provider_specialty} appointment.` },
+      { speaker: "office" as const, text: `I can check availability right now. I have ${args.data.provider_name}'s calendar open.` },
+      { speaker: "mara" as const, text: `The referral is from ${args.referringDoctor ?? "the primary care doctor on file"}, and the patient has ${insuranceLine}.` },
+      { speaker: "office" as const, text: `We can complete that scheduling check now. I have ${slot} available.` },
+      { speaker: "mara" as const, text: "That works for the requested preferences. Please book that slot." },
+      { speaker: "office" as const, text: `Done — ${args.data.patient_name} is booked with ${args.data.provider_name} on ${slot}.` },
+      { speaker: "mara" as const, text: "Is there anything the patient should bring or have done before the visit — referral, recent records, bloodwork, imaging, EKG?" },
+      { speaker: "office" as const, text: prep.map((p) => p.text).join(". ") + "." },
+    ],
+    outcome: { kind: "offered" as const, slot, prep },
+  };
+}
+
 async function loadDemoPatientContext(patientId?: string) {
   if (!patientId) return null;
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
@@ -213,18 +310,15 @@ OPENING_LINE (Mara's first turn must use this verbatim, then optionally add one 
       // Gracefully degrade so the simulator can continue with a transcript-only
       // fallback instead of crashing the UI (e.g. workspace credit limit 403).
       console.warn(`[generateBookingDialog] Gateway ${res.status}: ${t}`);
+      const fallback = deterministicAvailabilityDialog({
+        data,
+        openingLine: canonicalOpeningLine,
+        referringDoctor,
+        payer,
+        plan,
+      });
       return {
-        turns: [
-          {
-            speaker: "mara" as const,
-            text: canonicalOpeningLine,
-          },
-          {
-            speaker: "office" as const,
-            text: `You've reached ${data.provider_name}'s office — please leave a message and we'll return your call.`,
-          },
-        ],
-        outcome: { kind: "voicemail" as const },
+        ...fallback,
         office_voice_id: pickOfficeVoice(data.provider_name),
         mara_voice_id: MARA_VOICE,
         gateway_error: res.status === 403 ? "credit_limit_reached" : `gateway_${res.status}`,
@@ -236,7 +330,19 @@ OPENING_LINE (Mara's first turn must use this verbatim, then optionally add one 
     try {
       parsed = JSON.parse(content);
     } catch {
-      throw new Error("Bad JSON from model");
+      const fallback = deterministicAvailabilityDialog({
+        data,
+        openingLine: canonicalOpeningLine,
+        referringDoctor,
+        payer,
+        plan,
+      });
+      return {
+        ...fallback,
+        office_voice_id: pickOfficeVoice(data.provider_name),
+        mara_voice_id: MARA_VOICE,
+        gateway_error: "bad_model_json",
+      };
     }
     const turns = Array.isArray(parsed.turns) ? parsed.turns : [];
     // Hard guarantee: Mara's first spoken turn uses the canonical opening line
