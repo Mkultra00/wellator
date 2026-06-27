@@ -207,7 +207,7 @@ function VoicePanelInner({ patient, scenario, context, onClose }: Props) {
 
       // Inject context after connect (works without overrides allow-listing).
       const appointmentsSummary = (voiceContext as any).appointments_summary as string;
-      const contextMsg = `Patient: ${patient.full_name}. Primary care provider on file: ${primaryProvider}. Insurance on file: ${insuranceSummary}. Upcoming appointments booked in this app: ${appointmentsSummary}. You can also call the get_appointments tool any time to refresh that list. Scenario: ${SCENARIO_LABEL[scenario]}. ${opener}`;
+      const contextMsg = `Patient: ${patient.full_name}. Primary care provider on file: ${primaryProvider}. Insurance on file: ${insuranceSummary}. Upcoming appointments booked in this app: ${appointmentsSummary}. You can also call the get_appointments tool any time to refresh that list. Scenario: ${SCENARIO_LABEL[scenario]}. Always end the call with a warm thank you and a clear goodbye, like "Thank you so much for your time. Goodbye, and take care!" ${opener}`;
       setTimeout(() => {
         try {
           conversation.sendContextualUpdate?.(contextMsg);
