@@ -108,37 +108,6 @@ export const listReferralNetwork = createServerFn({ method: "GET" })
   });
 
 
-export const getBookingContext = createServerFn({ method: "GET" })
-  .inputValidator((d) => z.object({ patient_id: z.string().min(1) }).parse(d))
-  .handler(async ({ data }) => {
-    const db = await admin();
-    const { data: pat } = await db
-      .from("patients")
-      .select("primary_provider_id")
-      .eq("id", data.patient_id)
-      .single();
-    const primaryId = pat?.primary_provider_id ?? null;
-    const { data: primary } = primaryId
-      ? await db.from("providers").select("name,specialty").eq("id", primaryId).maybeSingle()
-      : { data: null };
-    const { data: ins } = await db
-      .from("insurance_profiles")
-      .select("payer,plan,member_id,group_id,referral_required")
-      .eq("patient_id", data.patient_id)
-      .maybeSingle();
-    return {
-      referring_doctor: primary ? `${primary.name} (${primary.specialty})` : null,
-      insurance: ins
-        ? {
-            payer: ins.payer,
-            plan: ins.plan,
-            member_id: ins.member_id,
-            group_id: ins.group_id,
-            referral_required: ins.referral_required,
-          }
-        : null,
-    };
-  });
 
 
 export const listScheduledCalls = createServerFn({ method: "GET" }).handler(async () => {
