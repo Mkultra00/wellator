@@ -344,21 +344,6 @@ OPENING_LINE (Mara's first turn must use this verbatim, then optionally add one 
       };
     }
     const turns = Array.isArray(parsed.turns) ? parsed.turns : [];
-    if (parsed.outcome?.kind === "voicemail") {
-      const fallback = deterministicAvailabilityDialog({
-        data,
-        openingLine: canonicalOpeningLine,
-        referringDoctor,
-        payer,
-        plan,
-      });
-      return {
-        ...fallback,
-        office_voice_id: pickOfficeVoice(data.provider_name),
-        mara_voice_id: MARA_VOICE,
-        gateway_error: "model_returned_voicemail",
-      };
-    }
     // Hard guarantee: Mara's first spoken turn uses the canonical opening line
     // so insurance + referring PCP are always consistent with the patient profile.
     const firstMaraIdx = turns.findIndex((t) => t?.speaker === "mara");
