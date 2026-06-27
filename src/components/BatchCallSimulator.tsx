@@ -1073,6 +1073,12 @@ function FinalReport({
                   )}
                 </div>
 
+                {(conflictsByIdx.get(i)?.length ?? 0) > 0 && c.decision !== "cancelled" && c.decision !== "rejected" && (
+                  <div className="mt-1 inline-flex items-center gap-1 rounded border border-red-500/60 bg-red-50/60 px-2 py-0.5 text-[11px] font-medium text-red-700 dark:bg-red-950/30 dark:text-red-300">
+                    ⚠ Time conflict with {conflictsByIdx.get(i)!.join(", ")} — recall one office to reschedule
+                  </div>
+                )}
+
                 {isOffered && c.decision !== "cancelled" && (() => {
                   const prep = ((c.outcome as any)?.prep ?? []) as Array<{
                     text: string;
