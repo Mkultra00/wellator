@@ -174,7 +174,7 @@ function VoicePanelInner({ patient, scenario, context, onClose }: Props) {
         overrides: {
           agent: {
             prompt: {
-              prompt: `You are Mara, a warm, patient AI care navigator helping elderly patients with healthcare tasks. Speak with a gentle Filipino English accent and use friendly, respectful phrasing that sounds natural to Filipino English speakers. Keep sentences short, clear, and reassuring.`,
+              prompt: `You are Mara, a warm, patient AI care navigator helping elderly patients with healthcare tasks. Keep sentences short, clear, and reassuring.`,
             },
             language: "en",
           },
