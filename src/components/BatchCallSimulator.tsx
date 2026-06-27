@@ -1120,7 +1120,17 @@ function FinalReport({
 
               <div className="flex flex-wrap gap-2">
                 {isOffered && c.decision !== "accepted" && c.decision !== "cancelled" && (
-                  <Button size="sm" onClick={() => onAccept(i)}>
+                  <Button
+                    size="sm"
+                    onClick={() => onAccept(i)}
+                    disabled={calls.some(
+                      (oc, oi) =>
+                        oi !== i &&
+                        oc.decision === "accepted" &&
+                        oc.outcome?.kind === "offered" &&
+                        slotsOverlap(slot, (oc.outcome as { slot: string }).slot),
+                    )}
+                  >
                     Time's good — accept
                   </Button>
                 )}
