@@ -10,7 +10,7 @@ import {
 import { Stethoscope, Inbox, LayoutDashboard } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { ReactNode } from "react";
-import avatarAsset from "@/assets/wellator-avatar.png.asset.json";
+import avatarAsset from "@/assets/wellator-avatar.png";
 
 function NavLink({
   to,
@@ -47,17 +47,17 @@ export function AppShell({ children }: { children: ReactNode }) {
     <div className="min-h-screen bg-background">
       <header className="border-b border-border bg-card">
         <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-4 px-4 py-3">
-          <Link to="/" className="flex items-center gap-2">
+          <Link to="/" className="flex items-center gap-3">
             <img
-              src={avatarAsset.url}
-              alt="Wellator"
-              className="h-9 w-9 rounded-full object-cover ring-2 ring-primary/20"
-              width={36}
-              height={36}
+              src={avatarAsset}
+              alt="Mara"
+              className="h-[72px] w-[72px] rounded-full object-cover ring-2 ring-primary/20"
+              width={72}
+              height={72}
             />
             <div className="leading-tight">
-              <div className="text-base font-semibold text-foreground">Wellator</div>
-              <div className="text-xs text-muted-foreground">AI Care Navigator</div>
+              <div className="text-3xl font-semibold text-foreground">Wellator</div>
+              <div className="text-sm text-muted-foreground">AI Care Navigator</div>
             </div>
           </Link>
 
