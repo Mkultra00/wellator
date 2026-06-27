@@ -168,11 +168,18 @@ export function ProviderPicker({ selectedIds, onChange, onConfirm }: Props) {
         </div>
       ) : (
         <>
-          <div className="mb-5">
+          <div className="mb-5 rounded-lg border border-border bg-muted/30 p-4">
             <div className="mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-              <UserRound className="h-3.5 w-3.5" /> Primary care
+              <UserRound className="h-3.5 w-3.5" /> Referring primary care
             </div>
-            <ProviderTile p={primary} />
+            <div className="font-medium">{primary.name}</div>
+            <div className="mt-1 flex items-center gap-1 text-sm text-muted-foreground">
+              <Stethoscope className="h-3.5 w-3.5" /> {primary.specialty}
+            </div>
+            <div className="mt-0.5 flex items-center gap-1 text-sm text-muted-foreground">
+              <MapPin className="h-3.5 w-3.5 shrink-0" />
+              <span className="truncate">{primary.clinic_address || primary.location}</span>
+            </div>
           </div>
 
           <Input
