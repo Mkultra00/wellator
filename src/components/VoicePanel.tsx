@@ -193,6 +193,22 @@ function VoicePanelInner({ patient, scenario, context, onClose }: Props) {
     }
   }, [conversation, fetchToken, patient, scenario, context, agentVariant]);
 
+  // Auto-start "Talk with Mara" so the user doesn't press an extra button.
+  useEffect(() => {
+    if (scenario !== "billing_explainer") return;
+    if (autoStartedRef.current) return;
+    if (conversation.status !== "disconnected") return;
+    autoStartedRef.current = true;
+    start();
+  }, [scenario, conversation.status, start]);
+
+  // Scroll the call panel into view when the call connects.
+  useEffect(() => {
+    if (conversation.status === "connected") {
+      panelRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+    }
+  }, [conversation.status]);
+
   const handleFiles = useCallback(
     async (files: FileList | null) => {
       if (!files || files.length === 0) return;
