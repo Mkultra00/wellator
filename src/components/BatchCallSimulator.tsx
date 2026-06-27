@@ -418,9 +418,42 @@ export function BatchCallSimulator({ patient, providers, preferences, onReset, o
           )
           .sort((a, b) => (a.distance_miles ?? 9999) - (b.distance_miles ?? 9999))[0];
         if (!alt) {
-          toast(`No alternative ${declinedCall.provider.specialty} available in network.`);
+          const esc = {
+            specialty: declinedCall.provider.specialty,
+            declined_provider_id: declinedCall.provider.id,
+            declined_provider_name: declinedCall.provider.name,
+            reason: `Patient declined ${declinedCall.provider.name} and no other in-network ${declinedCall.provider.specialty} remains. Escalating to human care coordinator.`,
+            created_at: new Date().toISOString(),
+          };
+          setEscalations((prev) =>
+            prev.some((e) => e.declined_provider_id === esc.declined_provider_id) ? prev : [...prev, esc],
+          );
+          persistCall({
+            data: {
+              patient_id: patient.id,
+              scenario: "human_escalation",
+              transcript: [
+                {
+                  speaker: "system",
+                  text: `Mara exhausted in-network ${esc.specialty} options for ${patient.full_name}. Human care coordinator will call the patient directly.`,
+                },
+              ],
+              outcome: JSON.stringify({
+                kind: "human_escalation",
+                status: "needs_human",
+                specialty: esc.specialty,
+                declined_provider_id: esc.declined_provider_id,
+                declined_provider_name: esc.declined_provider_name,
+                reason: esc.reason,
+              }),
+            },
+          }).catch(() => {});
+          toast.warning(`Escalated to care coordinator: no other ${esc.specialty} in network`, {
+            description: "A human will call the patient directly.",
+          });
           continue;
         }
+
         usedIds.add(alt.id);
         followupTasks.push(async () => {
           let newIdx = -1;
