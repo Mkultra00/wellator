@@ -63,6 +63,31 @@ function scoreOutcome(o: DialogOutcome | undefined, prefs: BookingPrefs, provide
   return score;
 }
 
+// Parse a slot like "Tuesday, July 16 at 10:15 AM" into a sortable timestamp.
+// Returns null if it can't be parsed. Assumes 60-minute visit duration.
+const VISIT_MIN = 60;
+function parseSlot(slot: string | null | undefined): { start: number; end: number; label: string } | null {
+  if (!slot) return null;
+  const m = slot.match(/([A-Za-z]+),?\s+([A-Za-z]+)\s+(\d{1,2})(?:,\s*(\d{4}))?\s+at\s+(\d{1,2}):(\d{2})\s*([AaPp][Mm])/);
+  if (!m) return null;
+  const [, , monthName, dayStr, yearStr, hStr, minStr, ampm] = m;
+  const months = ["january","february","march","april","may","june","july","august","september","october","november","december"];
+  const mi = months.indexOf(monthName.toLowerCase());
+  if (mi < 0) return null;
+  let h = parseInt(hStr, 10) % 12;
+  if (ampm.toUpperCase() === "PM") h += 12;
+  const year = yearStr ? parseInt(yearStr, 10) : new Date().getFullYear();
+  const d = new Date(year, mi, parseInt(dayStr, 10), h, parseInt(minStr, 10));
+  const start = d.getTime();
+  return { start, end: start + VISIT_MIN * 60_000, label: slot };
+}
+
+function slotsOverlap(a: string | null | undefined, b: string | null | undefined): boolean {
+  const pa = parseSlot(a); const pb = parseSlot(b);
+  if (!pa || !pb) return false;
+  return pa.start < pb.end && pb.start < pa.end;
+}
+
 type Props = {
   patient: Patient;
   providers: PickedProvider[];
