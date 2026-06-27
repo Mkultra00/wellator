@@ -75,7 +75,7 @@ export const generateBookingDialog = createServerFn({ method: "POST" })
       prefs.preferred_locations ? ` near ${prefs.preferred_locations}` : ""
     }${prefs.notes ? `. Notes: ${prefs.notes}` : ""}`;
 
-    const system = `You generate realistic short phone-call transcripts between Mara (an AI care navigator calling on behalf of a patient) and a receptionist at a doctor's office. Output ONLY valid JSON matching: {"turns":[{"speaker":"mara"|"office","text":"..."}], "outcome": {"kind":"offered","slot":"..."} | {"kind":"voicemail"} | {"kind":"no_availability"}}. 6-10 turns. Natural, concise spoken lines (1-2 sentences each). In her OPENING turn Mara must: identify herself as an AI care navigator, name the patient, name the referring primary care doctor (if provided), and state the patient's insurance payer + plan (if provided). Then request an appointment matching preferences. Receptionist either offers a specific slot (day + time), says no availability for ~2 weeks, or it's a voicemail (then only 1-2 turns, Mara leaves a message including referring doctor and insurance). Vary outcomes naturally — ~65% offered, ~20% no_availability, ~15% voicemail.`;
+    const system = `You generate realistic short phone-call transcripts between Mara (an AI care navigator calling on behalf of a patient) and a receptionist at a doctor's office. Output ONLY valid JSON matching: {"turns":[{"speaker":"mara"|"office","text":"..."}], "outcome": {"kind":"offered","slot":"..."} | {"kind":"voicemail"} | {"kind":"no_availability"}}. 6-10 turns. Natural, concise spoken lines (1-2 sentences each). In her OPENING turn Mara must: identify herself as an AI care navigator, name the patient, name the referring primary care doctor (if provided), and state the patient's insurance payer + plan (if provided). Then request an appointment matching preferences. If this is a CALLBACK (the user prompt will say so), Mara opens by saying she's calling back about the previously offered slot, explains the patient asked to reschedule and gives the reason (day vs time), and asks for an alternative that fits. Receptionist either offers a specific slot (day + time), says no availability for ~2 weeks, or it's a voicemail (then only 1-2 turns, Mara leaves a message). Vary outcomes naturally — ~65% offered, ~20% no_availability, ~15% voicemail.`;
 
     const insLine = data.insurance
       ? `Insurance: ${data.insurance.payer ?? "Unknown payer"}${data.insurance.plan ? ` — ${data.insurance.plan}` : ""}${data.insurance.member_id ? ` (member ${data.insurance.member_id})` : ""}${data.insurance.referral_required ? " — referral required" : ""}`
@@ -84,11 +84,16 @@ export const generateBookingDialog = createServerFn({ method: "POST" })
       ? `Referred by: ${data.referring_doctor}`
       : "Referred by: self-referral (no PCP on file)";
 
+    const recallLine = data.recall_reason
+      ? `\n*** CALLBACK *** Previously offered: ${data.previous_slot ?? "an earlier slot"}. Patient asked to reschedule. Reason: ${data.recall_reason}. Mara must reference this and request a different ${/(day|date|weekday)/i.test(data.recall_reason) ? "day" : "time"} that still fits preferences.`
+      : "";
+
     const user = `Patient: ${data.patient_name}
 ${refLine}
 ${insLine}
 Calling: ${data.provider_name}, ${data.provider_specialty} — ${data.provider_location}
-${prefLine}`;
+${prefLine}${recallLine}`;
+
 
     const res = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
