@@ -16,7 +16,6 @@ const ALLOWED: ToolName[] = [
   "book_appointment",
   "get_insurance_summary",
   "get_billing_summary",
-  "record_pt_feedback",
   "request_human_transfer",
 ];
 

@@ -9,7 +9,7 @@ import { usePatient } from "@/lib/patient-context";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { CalendarPlus, Activity, FileText, ArrowRight, ArrowLeft } from "lucide-react";
+import { CalendarPlus, FileText, ArrowRight, ArrowLeft } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/")({
@@ -19,12 +19,12 @@ export const Route = createFileRoute("/")({
       {
         name: "description",
         content:
-          "Voice-first AI care coordinator that books appointments, follows up after visits, and explains bills in plain language.",
+          "Voice-first AI care coordinator that books appointments and explains bills in plain language.",
       },
       { property: "og:title", content: "Mara — AI Care Navigator" },
       {
         property: "og:description",
-        content: "Talk to Mara to book a visit, follow up after a treatment, or get help with a bill.",
+        content: "Talk to Mara to book a visit or get help with a bill.",
       },
     ],
   }),
@@ -44,12 +44,6 @@ const CARDS: CardDef[] = [
     title: "Book an appointment",
     body: "Pick every doctor you'd be willing to see — Mara batch-calls each office, compares availability against your preferences, and books the best match.",
     Icon: CalendarPlus,
-  },
-  {
-    id: "pt_followup",
-    title: "After-visit follow-up",
-    body: "Walk through a quick check-in after a physical therapy or outpatient visit. Pain, mobility, exercises, anything on your mind.",
-    Icon: Activity,
   },
   {
     id: "billing_explainer",
