@@ -730,7 +730,23 @@ export function BatchCallSimulator({ patient, providers, preferences, onReset, o
 
 
 
-  function confirmBooking(i: number) {
+  // Collect every offered slot we should treat as "busy" when calling another
+  // office — accepted bookings plus any other live offer that's still on the
+  // table (so Mara doesn't double-book the patient).
+  function busySlotsExcluding(excludeIdx: number): string[] {
+    return calls
+      .map((c, idx) => ({ c, idx }))
+      .filter(
+        ({ c, idx }) =>
+          idx !== excludeIdx &&
+          c.decision !== "cancelled" &&
+          c.decision !== "rejected" &&
+          c.outcome?.kind === "offered",
+      )
+      .map(({ c }) => (c.outcome as { slot: string }).slot);
+  }
+
+  async function confirmBooking(i: number) {
     const target = calls[i];
     const targetSlot = target.outcome?.kind === "offered" ? (target.outcome as { slot: string }).slot : null;
     const conflict = calls.find(
@@ -741,9 +757,35 @@ export function BatchCallSimulator({ patient, providers, preferences, onReset, o
         slotsOverlap(targetSlot, (c.outcome as { slot: string }).slot),
     );
     if (conflict) {
-      toast.error(
-        `Time conflict with ${conflict.provider.name} (${(conflict.outcome as { slot: string }).slot}). Recall this office for a different time.`,
+      const otherSlot = (conflict.outcome as { slot: string }).slot;
+      toast.warning(
+        `Time conflict with ${conflict.provider.name} (${otherSlot}). Mara is calling ${target.provider.name} back to ask for a different time at least an hour away.`,
       );
+      const prevSlot = targetSlot;
+      setCalls((prev) =>
+        prev.map((c, idx) =>
+          idx === i
+            ? {
+                ...c,
+                status: "queued",
+                outcome: undefined,
+                turns: [],
+                revealed: 0,
+                decision: undefined,
+                recall_reason: `conflicts with ${conflict.provider.name} at ${otherSlot} — need a different day or a time at least one hour away`,
+                origin: "callback",
+              }
+            : c,
+        ),
+      );
+      setActiveIdx(i);
+      setPhase("running");
+      await runOne(i, target.provider, {
+        recall_reason: `conflicts with ${conflict.provider.name} at ${otherSlot} — need a different day, or at least 60 minutes away on the same day`,
+        previous_slot: prevSlot,
+        busy_slots: busySlotsExcluding(i),
+      });
+      setPhase("finished");
       return;
     }
     setConfirmedIdx(i);
@@ -782,6 +824,7 @@ export function BatchCallSimulator({ patient, providers, preferences, onReset, o
     await runOne(i, target.provider, {
       recall_reason: reason || undefined,
       previous_slot: prevSlot,
+      busy_slots: busySlotsExcluding(i),
     });
     setPhase("finished");
   }
