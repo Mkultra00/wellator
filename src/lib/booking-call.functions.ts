@@ -370,7 +370,25 @@ export const generatePatientConfirmDialog = createServerFn({ method: "POST" })
     });
     if (!res.ok) {
       const t = await res.text().catch(() => "");
-      throw new Error(`Gateway ${res.status}: ${t}`);
+      console.warn(`[generatePatientConfirmDialog] Gateway ${res.status}: ${t}`);
+      // Auto-accept all offers so the booking flow still completes when the
+      // AI gateway is unavailable (e.g. workspace credit limit reached).
+      return {
+        turns: [
+          {
+            speaker: "mara" as const,
+            text: `Hi ${data.patient_name.split(" ")[0]}, this is Mara. I secured ${data.offers.length} appointment${data.offers.length === 1 ? "" : "s"} for you. I'll email the details now — please reply if anything needs to change.`,
+          },
+        ],
+        outcome: {
+          accepted_provider_ids: data.offers.map((o) => o.provider_id),
+          declined_provider_ids: [],
+          callback_requests: [],
+        },
+        mara_voice_id: MARA_VOICE,
+        patient_voice_id: pickPatientVoice(data.patient_name),
+        gateway_error: res.status === 403 ? "credit_limit_reached" : `gateway_${res.status}`,
+      };
     }
     const json = await res.json();
     const content = json?.choices?.[0]?.message?.content ?? "{}";
