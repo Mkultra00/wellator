@@ -159,7 +159,7 @@ function VoicePanelInner({ patient, scenario, context, onClose }: Props) {
             preferences?: {
               preferred_locations?: string;
               days?: string[];
-              time_of_day?: string;
+              time_of_day?: string | string[];
               max_distance_miles?: number;
               notes?: string;
             };
@@ -173,7 +173,7 @@ function VoicePanelInner({ patient, scenario, context, onClose }: Props) {
       if (scenario === "new_booking" && providers.length > 0) {
         const list = providers.map((p) => `${p.name} (${p.specialty}, ${p.location})`).join("; ");
         const prefLine = prefs
-          ? ` The patient prefers ${prefs.time_of_day ?? "any time"} on ${(prefs.days ?? []).join(", ") || "any day"}, within ${prefs.max_distance_miles ?? "any"} miles${prefs.preferred_locations ? ` near ${prefs.preferred_locations}` : ""}${prefs.notes ? `. Notes: ${prefs.notes}` : ""}.`
+          ? ` The patient prefers ${Array.isArray(prefs.time_of_day) ? (prefs.time_of_day.length ? prefs.time_of_day.join(" or ") : "any time") : (prefs.time_of_day ?? "any time")} on ${(prefs.days ?? []).join(", ") || "any day"}, within ${prefs.max_distance_miles ?? "any"} miles${prefs.preferred_locations ? ` near ${prefs.preferred_locations}` : ""}${prefs.notes ? `. Notes: ${prefs.notes}` : ""}.`
           : "";
         opener = `Hi, this is Mara, an AI care navigator calling on behalf of ${patient.full_name}. The referring primary care provider is ${primaryProvider}, and the insurance on file is ${insuranceSummary}. I have a batch of ${providers.length} offices to call to book a new appointment: ${list}.${prefLine} I'll work through them one at a time — starting with the first office now. Could you help me find the next available slot?`;
       }
