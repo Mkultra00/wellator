@@ -95,6 +95,7 @@ export const generateBookingDialog = createServerFn({ method: "POST" })
 CRITICAL FACT-USE RULES — do NOT invent or alter patient facts:
 - Use the patient name, referring primary care doctor, insurance payer, plan, and member id EXACTLY as given in the user message. Copy them verbatim — never substitute other doctor names, payers (Aetna/BCBS/UHC/Medicare/etc.), or plan names.
 - If a field is marked "not on file" or "self-referral", say that — do not make one up.
+- If the user message contains a referring doctor or insurance line, Mara must NEVER say self-referred, no insurance, or insurance not on file anywhere in the transcript.
 - Mara's FIRST turn MUST use the prebuilt OPENING_LINE provided in the user message verbatim. You may append one short sentence requesting the appointment, but do not change the patient/PCP/insurance wording.
 
 If this is a CALLBACK (the user prompt will say so), Mara's opening instead references the previously offered slot, explains the patient asked to reschedule with the reason (day vs time), and asks for an alternative — still using the exact patient name, PCP, and insurance from the user message.
@@ -113,14 +114,17 @@ When the office OFFERS a slot, BEFORE the call wraps Mara must ask: "Is there an
       : "Referred by: self-referral (no PCP on file)";
 
     const firstName = data.patient_name.split(" ")[0];
-    const openingLine = `Hi, this is Mara, an AI care navigator calling on behalf of ${data.patient_name}. ${
+    const patientFactLine = `${
       data.referring_doctor
         ? `${firstName} was referred by ${data.referring_doctor}`
         : `${firstName} is self-referred`
     }, and ${firstName}'s insurance is ${payer ?? "not on file"}${plan ? ` (${plan})` : ""}${memberId ? `, member ID ${memberId}` : ""}.${referralReq}`;
+    const openingLine = `Hi, this is Mara, an AI care navigator calling on behalf of ${data.patient_name}. ${patientFactLine}`;
+    const callbackOpeningLine = `Hi, this is Mara, an AI care navigator calling back on behalf of ${data.patient_name}. ${patientFactLine} The patient asked me to reschedule the previously offered appointment${data.previous_slot ? ` (${data.previous_slot})` : ""} because ${data.recall_reason ?? "the time did not work"}. Could we look for a different ${data.recall_reason && /(day|date|weekday)/i.test(data.recall_reason) ? "day" : "time"}?`;
+    const canonicalOpeningLine = data.recall_reason ? callbackOpeningLine : openingLine;
 
     const recallLine = data.recall_reason
-      ? `\n*** CALLBACK *** Previously offered: ${data.previous_slot ?? "an earlier slot"}. Patient asked to reschedule. Reason: ${data.recall_reason}. Mara must reference this and request a different ${/(day|date|weekday)/i.test(data.recall_reason) ? "day" : "time"} that still fits preferences.`
+      ? `\n*** CALLBACK *** Previously offered: ${data.previous_slot ?? "an earlier slot"}. Patient asked to reschedule. Reason: ${data.recall_reason}. Mara must use the OPENING_LINE verbatim and request a different ${/(day|date|weekday)/i.test(data.recall_reason) ? "day" : "time"} that still fits preferences.`
       : "";
 
     const user = `Patient: ${data.patient_name}
@@ -130,7 +134,7 @@ Calling: ${data.provider_name}, ${data.provider_specialty} — ${data.provider_l
 ${prefLine}${recallLine}
 
 OPENING_LINE (Mara's first turn must use this verbatim, then optionally add one short sentence requesting the appointment):
-"${openingLine}"`;
+"${canonicalOpeningLine}"`;
 
 
     const res = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
@@ -164,8 +168,8 @@ OPENING_LINE (Mara's first turn must use this verbatim, then optionally add one 
     // Hard guarantee: Mara's first spoken turn uses the canonical opening line
     // so insurance + referring PCP are always consistent with the patient profile.
     const firstMaraIdx = turns.findIndex((t) => t?.speaker === "mara");
-    if (firstMaraIdx >= 0 && !data.recall_reason) {
-      turns[firstMaraIdx] = { speaker: "mara", text: openingLine };
+    if (firstMaraIdx >= 0) {
+      turns[firstMaraIdx] = { speaker: "mara", text: canonicalOpeningLine };
     }
     return {
       turns,

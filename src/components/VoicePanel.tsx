@@ -160,13 +160,19 @@ function VoicePanelInner({ patient, scenario, context, onClose }: Props) {
         | undefined;
       const providers = batch?.providers ?? [];
       const prefs = batch?.preferences;
+      const primaryProvider = patient.primary_provider
+        ? `${patient.primary_provider.name} (${patient.primary_provider.specialty})`
+        : "No primary provider on file";
+      const insuranceSummary = patient.insurance
+        ? `${patient.insurance.payer}${patient.insurance.plan ? ` — ${patient.insurance.plan}` : ""}${patient.insurance.member_id ? `, member ID ${patient.insurance.member_id}` : ""}${patient.insurance.referral_required ? ", referral required" : ""}`
+        : "No insurance profile on file";
       let opener = SCENARIO_OPENER[scenario];
       if (scenario === "new_booking" && providers.length > 0) {
         const list = providers.map((p) => `${p.name} (${p.specialty}, ${p.location})`).join("; ");
         const prefLine = prefs
           ? ` The patient prefers ${prefs.time_of_day ?? "any time"} on ${(prefs.days ?? []).join(", ") || "any day"}, within ${prefs.max_distance_miles ?? "any"} miles${prefs.preferred_locations ? ` near ${prefs.preferred_locations}` : ""}${prefs.notes ? `. Notes: ${prefs.notes}` : ""}.`
           : "";
-        opener = `Hi, this is Mara, an AI care navigator calling on behalf of ${patient.full_name}. I have a batch of ${providers.length} offices to call to book a new appointment: ${list}.${prefLine} I'll work through them one at a time — starting with the first office now. Could you help me find the next available slot?`;
+        opener = `Hi, this is Mara, an AI care navigator calling on behalf of ${patient.full_name}. The referring primary care provider is ${primaryProvider}, and the insurance on file is ${insuranceSummary}. I have a batch of ${providers.length} offices to call to book a new appointment: ${list}.${prefLine} I'll work through them one at a time — starting with the first office now. Could you help me find the next available slot?`;
       }
       await conversation.startSession({
         conversationToken: token,
@@ -174,7 +180,7 @@ function VoicePanelInner({ patient, scenario, context, onClose }: Props) {
         overrides: {
           agent: {
             prompt: {
-              prompt: `You are Mara, a warm, patient AI care navigator helping elderly patients with healthcare tasks. Keep sentences short, clear, and reassuring.`,
+              prompt: `You are Mara, a warm, patient AI care navigator helping elderly patients with healthcare tasks. Keep sentences short, clear, and reassuring. Use the patient profile variables exactly as given. If primary_provider is present, never describe the patient as self-referred. If insurance_summary is present, never say the patient has no insurance or insurance is not on file.`,
             },
             language: "en",
           },
@@ -182,6 +188,8 @@ function VoicePanelInner({ patient, scenario, context, onClose }: Props) {
         dynamicVariables: {
           patient_id: patient.id,
           patient_name: patient.full_name,
+          primary_provider: primaryProvider,
+          insurance_summary: insuranceSummary,
           preferred_language: patient.preferred_language,
           accessibility_notes: patient.accessibility_notes ?? "",
           scenario,
