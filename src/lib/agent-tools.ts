@@ -74,7 +74,7 @@ export async function runTool(
 
       const { data: insuranceRow } = await db
         .from("insurance_profiles")
-        .select("payer,plan,member_id")
+        .select("payer,plan")
         .eq("patient_id", patient_id)
         .maybeSingle();
 
@@ -99,7 +99,7 @@ export async function runTool(
       const { data, error } = await db
         .from("patients")
         .select(
-          "id,full_name,preferred_language,accessibility_notes,primary_provider:providers!patients_primary_provider_id_fkey(name,specialty,clinic_address),insurance_profiles(payer,plan,member_id,group_id,referral_required)",
+          "id,full_name,preferred_language,accessibility_notes,primary_provider:providers!patients_primary_provider_id_fkey(name,specialty,clinic_address),insurance_profiles(payer,plan,referral_required)",
         )
         .eq("id", patient_id)
         .maybeSingle();
@@ -120,7 +120,7 @@ export async function runTool(
                 ? `${primary.name} (${primary.specialty})`
                 : "primary care provider on file in demo profile",
               insurance_summary: insurance?.payer
-                ? `${insurance.payer}${insurance.plan ? ` — ${insurance.plan}` : ""}${insurance.member_id ? `, member ID ${insurance.member_id}` : ""}${insurance.referral_required ? ", referral required" : ""}`
+                ? `${insurance.payer}${insurance.plan ? ` — ${insurance.plan}` : ""}${insurance.referral_required ? ", referral required" : ""}`
                 : "insurance on file in demo profile",
             }
           : null,
@@ -163,7 +163,7 @@ export async function runTool(
       const { patient_id } = params as { patient_id: string };
       const { data, error } = await db
         .from("insurance_profiles")
-        .select("payer,plan,member_id,referral_required,copay_cents")
+        .select("payer,plan,referral_required,copay_cents")
         .eq("patient_id", patient_id)
         .maybeSingle();
       if (error) throw error;

@@ -256,7 +256,7 @@ export function BatchCallSimulator({ patient, providers, preferences, onReset, o
     const firstName = patient.full_name.split(" ")[0];
     const insurance = bookingContext.insurance;
     const insuranceLine = insurance?.payer
-      ? `${insurance.payer}${insurance.plan ? ` (${insurance.plan})` : ""}${insurance.member_id ? `, member ID ${insurance.member_id}` : ""}`
+      ? `${insurance.payer}${insurance.plan ? ` (${insurance.plan})` : ""}`
       : "insurance on file";
     const referrer = bookingContext.referring_doctor ?? "the primary care provider on file";
     const prefTime = preferences.time_of_day.length ? preferences.time_of_day.join(" or ") : "any time";

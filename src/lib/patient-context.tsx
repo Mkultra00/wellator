@@ -24,8 +24,6 @@ export type Patient = {
   insurance: {
     payer: string;
     plan: string | null;
-    member_id: string | null;
-    group_id: string | null;
     referral_required: boolean | null;
   } | null;
 };

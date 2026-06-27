@@ -38,7 +38,7 @@ export const listPatients = createServerFn({ method: "GET" }).handler(async () =
   const { data, error } = await db
     .from("patients")
     .select(
-      "id,full_name,dob,preferred_language,accessibility_notes,persona_note,primary_provider_id,address,latitude,longitude,needed_specialties,primary_provider:providers!patients_primary_provider_id_fkey(name,specialty,clinic_address),insurance_profiles(payer,plan,member_id,group_id,referral_required)",
+      "id,full_name,dob,preferred_language,accessibility_notes,persona_note,primary_provider_id,address,latitude,longitude,needed_specialties,primary_provider:providers!patients_primary_provider_id_fkey(name,specialty,clinic_address),insurance_profiles(payer,plan,referral_required)",
     )
     .order("full_name");
   if (error) throw new Error(error.message);
@@ -57,7 +57,7 @@ export const getPatientVoiceContext = createServerFn({ method: "GET" })
     const { data: p, error } = await db
       .from("patients")
       .select(
-        "id,full_name,preferred_language,accessibility_notes,primary_provider:providers!patients_primary_provider_id_fkey(name,specialty,clinic_address),insurance_profiles(payer,plan,member_id,group_id,referral_required)",
+      "id,full_name,preferred_language,accessibility_notes,primary_provider:providers!patients_primary_provider_id_fkey(name,specialty,clinic_address),insurance_profiles(payer,plan,referral_required)",
       )
       .eq("id", data.patient_id)
       .maybeSingle();
