@@ -114,8 +114,104 @@ export type PrepItem = {
 };
 export type DialogOutcome =
   | { kind: "offered"; slot: string; prep?: PrepItem[] }
-  | { kind: "voicemail" }
   | { kind: "no_availability" };
+
+function stableHash(value: string) {
+  let h = 0;
+  for (let i = 0; i < value.length; i++) h = (h * 31 + value.charCodeAt(i)) | 0;
+  return Math.abs(h);
+}
+
+function choosePreferredDay(days?: string[]) {
+  const normalized = (days ?? []).filter(Boolean);
+  if (normalized.length > 0) return normalized[0];
+  return "Tuesday";
+}
+
+function choosePreferredTime(timeOfDay?: string | string[] | null) {
+  const options = Array.isArray(timeOfDay) ? timeOfDay : timeOfDay ? [timeOfDay] : [];
+  const first = options[0]?.toLowerCase() ?? "morning";
+  if (first.includes("afternoon")) return "2:30 PM";
+  if (first.includes("evening")) return "4:15 PM";
+  if (first.includes("midday") || first.includes("noon")) return "12:45 PM";
+  return "10:15 AM";
+}
+
+function nextSlot(providerName: string, preferences: z.infer<typeof DialogInput>["preferences"]) {
+  const day = choosePreferredDay(preferences.days);
+  const time = choosePreferredTime(preferences.time_of_day);
+  const offset = (stableHash(providerName) % 3) + 1;
+  return `${day}, July ${14 + offset} at ${time}`;
+}
+
+function prepForSpecialty(specialty: string): PrepItem[] {
+  const s = specialty.toLowerCase();
+  const common: PrepItem[] = [
+    { text: "Bring photo ID, insurance card, and a current medication list", category: "bring", bookable: false },
+    { text: "Ask the referring primary care doctor to send the referral and recent office notes", category: "pcp_send", bookable: false },
+  ];
+  if (s.includes("card")) {
+    return [
+      ...common,
+      { text: "Recent EKG before the visit", category: "cardiac", bookable: true },
+      { text: "Recent lipid panel bloodwork", category: "lab", bookable: true },
+    ];
+  }
+  if (s.includes("ortho")) {
+    return [
+      ...common,
+      { text: "Recent imaging for the painful joint or area", category: "imaging", bookable: true },
+    ];
+  }
+  if (s.includes("gastro") || s.includes("gi")) {
+    return [
+      ...common,
+      { text: "Fasting bloodwork before the appointment", category: "lab", bookable: true },
+    ];
+  }
+  return common;
+}
+
+function deterministicAvailabilityDialog(args: {
+  data: z.infer<typeof DialogInput>;
+  openingLine: string;
+  referringDoctor: string | null;
+  payer: string | null;
+  plan: string | null;
+  reason?: string;
+}) {
+  const slot = nextSlot(args.data.provider_name, args.data.preferences);
+  const prep = prepForSpecialty(args.data.provider_specialty);
+  const noAvailability = stableHash(`${args.data.provider_name}:${args.data.provider_specialty}`) % 5 === 0;
+  const insuranceLine = args.payer ? `${args.payer}${args.plan ? ` ${args.plan}` : ""}` : "the insurance on file";
+
+  if (noAvailability) {
+    return {
+      turns: [
+        { speaker: "mara" as const, text: `${args.openingLine} I'm calling to schedule the first available ${args.data.provider_specialty} appointment.` },
+        { speaker: "office" as const, text: `I can check that right now. I have the calendar open for ${args.data.provider_name}.` },
+        { speaker: "mara" as const, text: `The referral is from ${args.referringDoctor ?? "the primary care doctor on file"}, and the patient has ${insuranceLine}.` },
+        { speaker: "office" as const, text: "I checked the calendar live, and we do not have availability in that requested window." },
+        { speaker: "office" as const, text: "The next open appointment is about three weeks out, so I would recommend trying another specialist on the list." },
+      ],
+      outcome: { kind: "no_availability" as const },
+    };
+  }
+
+  return {
+    turns: [
+      { speaker: "mara" as const, text: `${args.openingLine} I'm calling to schedule the first available ${args.data.provider_specialty} appointment.` },
+      { speaker: "office" as const, text: `I can check availability right now. I have ${args.data.provider_name}'s calendar open.` },
+      { speaker: "mara" as const, text: `The referral is from ${args.referringDoctor ?? "the primary care doctor on file"}, and the patient has ${insuranceLine}.` },
+      { speaker: "office" as const, text: `We can complete that scheduling check now. I have ${slot} available.` },
+      { speaker: "mara" as const, text: "That works for the requested preferences. Please book that slot." },
+      { speaker: "office" as const, text: `Done — ${args.data.patient_name} is booked with ${args.data.provider_name} on ${slot}.` },
+      { speaker: "mara" as const, text: "Is there anything the patient should bring or have done before the visit — referral, recent records, bloodwork, imaging, EKG?" },
+      { speaker: "office" as const, text: prep.map((p) => p.text).join(". ") + "." },
+    ],
+    outcome: { kind: "offered" as const, slot, prep },
+  };
+}
 
 async function loadDemoPatientContext(patientId?: string) {
   if (!patientId) return null;
@@ -161,7 +257,7 @@ export const generateBookingDialog = createServerFn({ method: "POST" })
     }${prefs.notes ? `. Notes: ${prefs.notes}` : ""}`;
 
 
-    const system = `You generate realistic short phone-call transcripts between Mara (an AI care navigator calling on behalf of a patient) and a scheduler at a doctor's office. The person who answers IS the office scheduler — they have the live appointment calendar open in front of them and full authority to confirm, hold, and book slots themselves on this call. They MUST complete the scheduling check live. They must NEVER say things like "let me check with the scheduler", "I'll have to check with scheduling", "I'll need to call you back", "let me transfer you", "I'll have someone get back to you", or otherwise defer the availability check to another person, later call, or callback. Instead they say things like "Let me pull up the calendar… I have Tuesday the 14th at 10:15am or Thursday the 16th at 2:30pm — which works?" and then BOOK the chosen slot on the call ("Great, I've got you down for Thursday at 2:30 with Dr. X."). Outcomes on the call are exactly one of: a concrete offered+booked slot, a live "no availability in that window" answer with the next open date, or (rarely) voicemail because no one picked up. Output ONLY valid JSON matching: {"turns":[{"speaker":"mara"|"office","text":"..."}], "outcome": {"kind":"offered","slot":"...","prep":[{"text":"...","category":"bring"|"pcp_send"|"lab"|"imaging"|"cardiac"|"in_office"|"other","bookable":true|false}]} | {"kind":"voicemail"} | {"kind":"no_availability"}}. 6-12 turns. Natural, concise spoken lines (1-2 sentences each).
+    const system = `You generate realistic short phone-call transcripts between Mara (an AI care navigator calling on behalf of a patient) and a scheduler at a doctor's office. The person who answers IS the office scheduler — they have the live appointment calendar open in front of them and full authority to confirm, hold, and book slots themselves on this call. They MUST complete the scheduling check live. They must NEVER say things like "let me check with the scheduler", "I'll have to check with scheduling", "I'll need to call you back", "let me transfer you", "I'll have someone get back to you", "please leave a voicemail", or otherwise defer the availability check to another person, later call, voicemail, or callback. Instead they say things like "Let me pull up the calendar… I have Tuesday the 14th at 10:15am or Thursday the 16th at 2:30pm — which works?" and then BOOK the chosen slot on the call ("Great, I've got you down for Thursday at 2:30 with Dr. X."). Outcomes on the call are exactly one of: a concrete offered+booked slot, or a live "no availability in that window" answer with the next open date. Output ONLY valid JSON matching: {"turns":[{"speaker":"mara"|"office","text":"..."}], "outcome": {"kind":"offered","slot":"...","prep":[{"text":"...","category":"bring"|"pcp_send"|"lab"|"imaging"|"cardiac"|"in_office"|"other","bookable":true|false}]} | {"kind":"no_availability"}}. 6-12 turns. Natural, concise spoken lines (1-2 sentences each).
 
 CRITICAL FACT-USE RULES — do NOT invent or alter patient facts:
 - Use the patient name, referring primary care doctor, insurance payer, and plan EXACTLY as given in the user message. Copy them verbatim — never substitute other doctor names, payers (Aetna/BCBS/UHC/Medicare/etc.), or plan names.
@@ -171,7 +267,7 @@ CRITICAL FACT-USE RULES — do NOT invent or alter patient facts:
 
 If this is a CALLBACK (the user prompt will say so), Mara's opening instead references the previously offered slot, explains the patient asked to reschedule with the reason (day vs time), and asks for an alternative — still using the exact patient name, PCP, and insurance from the user message.
 
-When the office OFFERS a slot, BEFORE the call wraps Mara must ask: "Is there anything the patient should bring or have done before the visit — referral, recent records, bloodwork, imaging, EKG?" The receptionist answers with 1-4 specific prep items appropriate to the specialty (e.g. cardiology often wants a recent EKG + lipid panel; orthopedics wants recent imaging of the affected joint; GI may want fasting bloodwork; many want a referral from PCP + photo ID + insurance card + medication list). Encode each in outcome.prep; bookable=true ONLY if it needs a separate appointment elsewhere (lab draw, imaging center, outpatient EKG). If the specialist will do it in-office, use category "in_office" and bookable=false. Otherwise: no availability for ~2 weeks, or voicemail (1-2 turns, no prep). Vary outcomes ~65% offered / ~20% no_availability / ~15% voicemail.`;
+When the office OFFERS a slot, BEFORE the call wraps Mara must ask: "Is there anything the patient should bring or have done before the visit — referral, recent records, bloodwork, imaging, EKG?" The receptionist answers with 1-4 specific prep items appropriate to the specialty (e.g. cardiology often wants a recent EKG + lipid panel; orthopedics wants recent imaging of the affected joint; GI may want fasting bloodwork; many want a referral from PCP + photo ID + insurance card + medication list). Encode each in outcome.prep; bookable=true ONLY if it needs a separate appointment elsewhere (lab draw, imaging center, outpatient EKG). If the specialist will do it in-office, use category "in_office" and bookable=false. Otherwise return no_availability with a concrete next open date. Vary outcomes ~80% offered / ~20% no_availability / 0% voicemail.`;
 
     const payer = insurance?.payer ?? null;
     const plan = insurance?.plan ?? null;
@@ -213,18 +309,15 @@ OPENING_LINE (Mara's first turn must use this verbatim, then optionally add one 
       // Gracefully degrade so the simulator can continue with a transcript-only
       // fallback instead of crashing the UI (e.g. workspace credit limit 403).
       console.warn(`[generateBookingDialog] Gateway ${res.status}: ${t}`);
+      const fallback = deterministicAvailabilityDialog({
+        data,
+        openingLine: canonicalOpeningLine,
+        referringDoctor,
+        payer,
+        plan,
+      });
       return {
-        turns: [
-          {
-            speaker: "mara" as const,
-            text: canonicalOpeningLine,
-          },
-          {
-            speaker: "office" as const,
-            text: `You've reached ${data.provider_name}'s office — please leave a message and we'll return your call.`,
-          },
-        ],
-        outcome: { kind: "voicemail" as const },
+        ...fallback,
         office_voice_id: pickOfficeVoice(data.provider_name),
         mara_voice_id: MARA_VOICE,
         gateway_error: res.status === 403 ? "credit_limit_reached" : `gateway_${res.status}`,
@@ -236,7 +329,19 @@ OPENING_LINE (Mara's first turn must use this verbatim, then optionally add one 
     try {
       parsed = JSON.parse(content);
     } catch {
-      throw new Error("Bad JSON from model");
+      const fallback = deterministicAvailabilityDialog({
+        data,
+        openingLine: canonicalOpeningLine,
+        referringDoctor,
+        payer,
+        plan,
+      });
+      return {
+        ...fallback,
+        office_voice_id: pickOfficeVoice(data.provider_name),
+        mara_voice_id: MARA_VOICE,
+        gateway_error: "bad_model_json",
+      };
     }
     const turns = Array.isArray(parsed.turns) ? parsed.turns : [];
     // Hard guarantee: Mara's first spoken turn uses the canonical opening line

@@ -14,7 +14,6 @@ import {
   Phone,
   CheckCircle2,
   XCircle,
-  Voicemail,
   ArrowLeft,
   ArrowRight,
   Trophy,
@@ -260,6 +259,8 @@ export function BatchCallSimulator({ patient, providers, preferences, onReset, o
       : "insurance on file";
     const referrer = bookingContext.referring_doctor ?? "the primary care provider on file";
     const prefTime = preferences.time_of_day.length ? preferences.time_of_day.join(" or ") : "any time";
+    const day = preferences.days[0] || "Tuesday";
+    const slot = `${day}, July 16 at ${prefTime === "any time" ? "10:15 AM" : prefTime}`;
     return {
       turns: [
         {
@@ -268,16 +269,36 @@ export function BatchCallSimulator({ patient, providers, preferences, onReset, o
         },
         {
           speaker: "office",
-          text: `Thanks for calling. I can't complete the scheduling check right now, but I can take a message for ${provider.name}'s scheduling team.`,
+          text: `I can check availability right now. I have ${provider.name}'s calendar open.`,
         },
         {
           speaker: "mara",
-          text: `Please note the patient prefers ${prefTime} on ${preferences.days.join(", ") || "any weekday"}, within ${preferences.max_distance_miles} miles. Please call back with available times.`,
+          text: `Please check for ${prefTime} on ${preferences.days.join(", ") || "any weekday"}, within ${preferences.max_distance_miles} miles.`,
+        },
+        {
+          speaker: "office",
+          text: `I can complete that now. I have ${slot} available and can book it while we're on the phone.`,
+        },
+        {
+          speaker: "mara",
+          text: "Please book that slot. Is there anything the patient should bring or have done before the visit?",
+        },
+        {
+          speaker: "office",
+          text: `Done — ${patient.full_name} is booked with ${provider.name} on ${slot}. Please bring photo ID, insurance card, and a medication list, and have the referral sent before the visit.`,
         },
       ],
-      outcome: { kind: "voicemail" },
+      outcome: {
+        kind: "offered",
+        slot,
+        prep: [
+          { text: "Bring photo ID, insurance card, and a current medication list", category: "bring", bookable: false },
+          { text: "Have the referring primary care doctor send the referral before the visit", category: "pcp_send", bookable: false },
+        ],
+      },
       office_voice_id: pickOfficeVoice(provider.name),
       mara_voice_id: MARA_VOICE_ID,
+      gateway_error: reason,
     } as PreparedDialog;
   }
 
@@ -364,9 +385,7 @@ export function BatchCallSimulator({ patient, providers, preferences, onReset, o
           status:
             dialog.outcome.kind === "offered"
               ? "booked"
-              : dialog.outcome.kind === "voicemail"
-                ? "needs_more_info"
-                : "no_availability",
+              : "no_availability",
         }),
       },
     }).catch(() => {});
@@ -905,7 +924,6 @@ function FinalReport({
   const accepted = calls.filter((c) => c.decision === "accepted");
   const cancelled = calls.filter((c) => c.decision === "cancelled");
   const noAvail = calls.filter((c) => c.outcome?.kind === "no_availability");
-  const vm = calls.filter((c) => c.outcome?.kind === "voicemail");
 
   return (
     <div className="border-t-2 border-border bg-muted/40 p-4">
@@ -943,7 +961,7 @@ function FinalReport({
         <Stat label="Slots offered" value={offered.length} />
         <Stat label="Accepted" value={accepted.length} tone="emerald" />
         <Stat label="No availability" value={noAvail.length} tone="destructive" />
-        <Stat label="Voicemail" value={vm.length} tone="amber" />
+        <Stat label="Completed live" value={offered.length + noAvail.length} tone="amber" />
       </div>
 
       <div className="space-y-2">
@@ -990,9 +1008,7 @@ function FinalReport({
                         ? "🚫 Patient declined this doctor — finding alternative"
                         : isOffered
                           ? `Offered ${slot}`
-                          : c.outcome?.kind === "voicemail"
-                            ? "Left voicemail — no live response"
-                            : "No availability"}
+                          : "No availability"}
                   {c.recall_reason && c.decision !== "rejected" && (
                     <span className="ml-1 italic">· recalled: {c.recall_reason}</span>
                   )}
@@ -1206,7 +1222,6 @@ function StatusIcon({
 }) {
   if (status === "live" || isActive) return <Loader2 className="h-4 w-4 animate-spin text-primary" />;
   if (status === "queued") return <Phone className="h-4 w-4 text-muted-foreground" />;
-  if (outcome?.kind === "voicemail") return <Voicemail className="h-4 w-4 text-amber-600" />;
   if (outcome?.kind === "no_availability") return <XCircle className="h-4 w-4 text-destructive" />;
   return <CheckCircle2 className="h-4 w-4 text-emerald-600" />;
 }
@@ -1233,12 +1248,6 @@ function OutcomeBadge({
       </Badge>
     );
   if (!outcome) return null;
-  if (outcome.kind === "voicemail")
-    return (
-      <Badge variant="outline" className="border-amber-500 text-xs text-amber-700">
-        Voicemail
-      </Badge>
-    );
   if (outcome.kind === "no_availability")
     return (
       <Badge variant="outline" className="border-destructive text-xs text-destructive">
