@@ -180,7 +180,73 @@ export function VoicePanel({ patient, scenario, context, onClose }: Props) {
     } finally {
       setConnecting(false);
     }
-  }, [conversation, fetchToken, patient, scenario, context]);
+  }, [conversation, fetchToken, patient, scenario, context, agentVariant]);
+
+  const handleFiles = useCallback(
+    async (files: FileList | null) => {
+      if (!files || files.length === 0) return;
+      for (const file of Array.from(files)) {
+        const id = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+        const isImage = file.type.startsWith("image/");
+        const previewUrl = isImage ? URL.createObjectURL(file) : undefined;
+        setAttachments((prev) => [
+          ...prev,
+          { id, filename: file.name, mime: file.type || "application/octet-stream", previewUrl, status: "analyzing" },
+        ]);
+        try {
+          const dataUrl = await new Promise<string>((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => resolve(reader.result as string);
+            reader.onerror = () => reject(reader.error ?? new Error("read failed"));
+            reader.readAsDataURL(file);
+          });
+          const { summary } = await runAnalyze({
+            data: { data_url: dataUrl, mime: file.type || "application/octet-stream", filename: file.name },
+          });
+          setAttachments((prev) =>
+            prev.map((a) => (a.id === id ? { ...a, status: "ready", summary } : a)),
+          );
+          // Show in transcript and push to live agent if connected.
+          setTranscript((prev) => {
+            const next = [
+              ...prev,
+              {
+                role: "user" as const,
+                text: `📎 Shared "${file.name}" — Mara has reviewed it.\n\n${summary}`,
+                at: new Date().toISOString(),
+              },
+            ];
+            transcriptRef.current = next;
+            return next;
+          });
+          if (conversation.status === "connected") {
+            conversation.sendContextualUpdate?.(
+              `The patient just shared an attachment named "${file.name}" (${file.type}). Here is what it shows:\n\n${summary}\n\nUse this to answer their questions about it.`,
+            );
+            toast.success("Attachment shared with Mara");
+          } else {
+            toast.success("Attachment analyzed — start the call to discuss");
+          }
+        } catch (e) {
+          const msg = e instanceof Error ? e.message : "Couldn't analyze attachment";
+          setAttachments((prev) =>
+            prev.map((a) => (a.id === id ? { ...a, status: "error", summary: msg } : a)),
+          );
+          toast.error("Attachment failed", { description: msg });
+        }
+      }
+    },
+    [conversation, runAnalyze],
+  );
+
+  function removeAttachment(id: string) {
+    setAttachments((prev) => {
+      const target = prev.find((a) => a.id === id);
+      if (target?.previewUrl) URL.revokeObjectURL(target.previewUrl);
+      return prev.filter((a) => a.id !== id);
+    });
+  }
+
 
   const stop = useCallback(async () => {
     await conversation.endSession();
