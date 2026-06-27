@@ -325,7 +325,7 @@ When the office OFFERS a slot, BEFORE the call wraps Mara must ask: "Is there an
 
 SCHEDULING CONFLICTS — the user message may list BUSY_SLOTS the patient already has on the calendar. Mara MUST mention these to the office up front ("the patient already has an appointment at <slot>, so please find something on a different day or at least an hour before or after") and the office MUST offer a slot that is either on a different day OR on the same day with at least 60 minutes of buffer between the end of one visit and the start of the next (visits run about an hour). NEVER offer or book a slot that lands within 60 minutes of any BUSY_SLOT on the same day. If the only same-day option would conflict, pick a different day.
 
-TIME DIVERSITY — every office has its own calendar. DO NOT default to the same canned times across calls (avoid always saying "10:15 AM" or "2:30 PM"). Pick exact clock times that vary by office: use a mix across 8:15a, 8:45a, 9:00a, 9:30a, 10:00a, 10:45a, 11:15a, 11:30a, 12:00p, 1:00p, 1:30p, 1:45p, 2:15p, 3:00p, 3:15p, 3:45p, 4:00p, 4:30p, 4:45p. Vary the weekday too. Do not reuse the slot from a previous office in this batch.
+TIME DIVERSITY — every office has its own calendar. DO NOT default to the same canned times across calls (avoid always saying "10:15 AM" or "2:30 PM"). Pick exact clock times that vary by office: use a mix across 8:15a, 8:45a, 9:00a, 9:30a, 10:00a, 10:45a, 11:15a, 11:30a, 12:00p, 1:00p, 1:30p, 1:45p, 2:15p, 3:00p, 3:15p, 3:45p, 4:00p, 4:30p, 4:45p. Vary the weekday too. Do not reuse the slot from a previous office in this batch.`;
 
     const payer = insurance?.payer ?? null;
     const plan = insurance?.plan ?? null;
