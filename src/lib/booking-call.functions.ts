@@ -138,11 +138,47 @@ function choosePreferredTime(timeOfDay?: string | string[] | null) {
   return "10:15 AM";
 }
 
-function nextSlot(providerName: string, preferences: z.infer<typeof DialogInput>["preferences"]) {
-  const day = choosePreferredDay(preferences.days);
-  const time = choosePreferredTime(preferences.time_of_day);
+// Parse a slot label like "Tuesday, July 16 at 10:15 AM" into a timestamp for
+// conflict checking. Mirrors the client-side parser; assumes 60-minute visit.
+function parseSlotTs(slot: string): number | null {
+  const m = slot.match(/([A-Za-z]+),?\s+([A-Za-z]+)\s+(\d{1,2})(?:,\s*(\d{4}))?\s+at\s+(\d{1,2}):(\d{2})\s*([AaPp][Mm])/);
+  if (!m) return null;
+  const [, , monthName, dayStr, yearStr, hStr, minStr, ampm] = m;
+  const months = ["january","february","march","april","may","june","july","august","september","october","november","december"];
+  const mi = months.indexOf(monthName.toLowerCase());
+  if (mi < 0) return null;
+  let h = parseInt(hStr, 10) % 12;
+  if (ampm.toUpperCase() === "PM") h += 12;
+  const year = yearStr ? parseInt(yearStr, 10) : new Date().getFullYear();
+  return new Date(year, mi, parseInt(dayStr, 10), h, parseInt(minStr, 10)).getTime();
+}
+
+// Build a slot that doesn't sit within 120 minutes (60-min visit + 60-min
+// buffer) of any already-booked slot on the same day.
+function nextSlot(
+  providerName: string,
+  preferences: z.infer<typeof DialogInput>["preferences"],
+  busySlots: string[] = [],
+) {
+  const days = (preferences.days ?? []).filter(Boolean);
+  const dayList = days.length ? days : ["Tuesday", "Wednesday", "Thursday", "Monday", "Friday"];
+  const baseTime = choosePreferredTime(preferences.time_of_day);
   const offset = (stableHash(providerName) % 3) + 1;
-  return `${day}, July ${14 + offset} at ${time}`;
+  const altTimes = [baseTime, "9:00 AM", "11:30 AM", "1:45 PM", "3:15 PM", "4:30 PM"];
+  const busyTs = busySlots.map(parseSlotTs).filter((t): t is number => t !== null);
+  const BLOCK_MS = 120 * 60_000;
+  for (const day of dayList) {
+    for (let d = 0; d < 5; d++) {
+      const dateNum = 14 + offset + d;
+      for (const time of altTimes) {
+        const candidate = `${day}, July ${dateNum} at ${time}`;
+        const ts = parseSlotTs(candidate);
+        const clash = ts != null && busyTs.some((b) => Math.abs(b - ts) < BLOCK_MS);
+        if (!clash) return candidate;
+      }
+    }
+  }
+  return `${dayList[0]}, July ${14 + offset} at ${baseTime}`;
 }
 
 function prepForSpecialty(specialty: string): PrepItem[] {
